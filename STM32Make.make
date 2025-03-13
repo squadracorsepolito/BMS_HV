@@ -75,12 +75,6 @@ endif
 ######################################
 # C sources
 C_SOURCES =  \
-Core/Lib/L9963E/src/L9963E.c \
-Core/Lib/L9963E/src/L9963E_drv.c \
-Core/Lib/stmlibs/circular_buffer/circular_buffer.c \
-Core/Lib/stmlibs/digital_filters/iir_filter/iir_filter.c \
-Core/Lib/stmlibs/fsm/fsm.c \
-Core/Lib/stmlibs/logger/logger.c \
 Core/Src/adc.c \
 Core/Src/bms_hv_fsm.c \
 Core/Src/bms_hv_fsm_weak.c \
@@ -209,15 +203,7 @@ AS_INCLUDES = \
 C_INCLUDES =  \
 -ICore/Inc \
 -ICore/Lib/L9963E \
--ICore/Lib/L9963E/inc \
 -ICore/Lib/stmlibs \
--ICore/Lib/stmlibs/circular_buffer \
--ICore/Lib/stmlibs/critical_section \
--ICore/Lib/stmlibs/digital_filters/iir_filter \
--ICore/Lib/stmlibs/digital_filters/median_filter \
--ICore/Lib/stmlibs/fsm \
--ICore/Lib/stmlibs/lock \
--ICore/Lib/stmlibs/logger \
 -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
 -IDrivers/CMSIS/Include \
 -IDrivers/STM32F4xx_HAL_Driver/Inc \
