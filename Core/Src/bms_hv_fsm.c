@@ -33,6 +33,8 @@ variables_t variables;
 
 static uint32_t resetting_error_entry_time = 0;
 static uint8_t driving_mode, charging_mode;
+driving_mode = 0;
+charging_mode = 0;
 // Variable Update function
 void variables_update(variables_t* variables){
 
