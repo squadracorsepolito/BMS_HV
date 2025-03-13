@@ -67,7 +67,11 @@ Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim_ex.c \
 Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.c \
 Core/Src/system_stm32f4xx.c \
 Core/Src/sysmem.c \
-Core/Src/syscalls.c  
+Core/Src/syscalls.c \
+Core/Src/bms_hv_fsm.c \
+Core/Lib/L9963E/L9963E.c \
+Core/Lib/L9963E/L9963E_drv.c \
+Core/Lib/stmlibs/fsm/fsm.c \
 
 # ASM sources
 ASM_SOURCES =  \
@@ -131,7 +135,9 @@ C_INCLUDES =  \
 -IDrivers/STM32F4xx_HAL_Driver/Inc \
 -IDrivers/STM32F4xx_HAL_Driver/Inc/Legacy \
 -IDrivers/CMSIS/Device/ST/STM32F4xx/Include \
--IDrivers/CMSIS/Include
+-IDrivers/CMSIS/Include \
+-ICore/Lib/L9963E \
+-ICore/Lib/stmlibs \
 
 
 # compile gcc flags
