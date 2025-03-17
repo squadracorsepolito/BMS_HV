@@ -14,31 +14,29 @@
 #define __weak __attribute__((weak))
 #endif // __weak
 
-// L9963E_StatusTypeDef L9963E_read_batt_voltage(L9963E_HandleTypeDef *handle,
-//     uint8_t device,
-//     uint16_t *vbatt_monitor,
-//     uint32_t *vbatt_sum);
+
 
 // L9963 initialization
+L9963E_HandleTypeDef* L9963E_handle;
 uint16_t vbattery_monitor;
 uint32_t vbattery_sum;
-extern L9963E_HandleTypeDef* L9963E_handle;
-extern uint8_t n_slaves;
+uint8_t n_slaves;
+
 // Variables
 extern uint8_t air_neg_int_state_closed, air_pos_int_state_closed ,air_pos_mech_state_open, air_neg_mech_state_open,
         ams_error, imd_error, dcbus_overvoltage, nstg_dcbus_overvoltage;
 
-
 variables_t variables;
 
 static uint32_t resetting_error_entry_time = 0;
-static uint8_t driving_mode, charging_mode;
-driving_mode = 0;
-charging_mode = 0;
-// Variable Update function
-void variables_update(variables_t* variables){
+ActiveMode_TypeDef active_mode = IDLE_MODE;
 
-    L9963E_read_batt_voltage(L9963E_handle, n_slaves, &vbattery_monitor, &vbattery_sum);
+// Variable Update function
+STMLIBS_StatusTypeDef variables_update(variables_t* variables){
+
+    if (L9963E_read_batt_voltage(L9963E_handle, n_slaves, &vbattery_monitor, &vbattery_sum) != L9963E_OK){
+        return STMLIBS_ERROR;
+    }
 
     variables -> air_neg_int_state_closed = AIRs_Neg_Int_Closed();
     variables -> air_pos_int_state_closed = AIRs_Pos_Int_Closed();
@@ -48,6 +46,8 @@ void variables_update(variables_t* variables){
     variables -> nstg_dcbus_overvoltage = STG_DCBUS_Over60V();
     variables -> vbattery_monitor = vbattery_monitor;
     variables -> vbattery_sum = vbattery_sum;
+
+    return STMLIBS_OK;
 }
 // Private wrapper function signatures
 
@@ -203,7 +203,6 @@ void FSM_BMS_HV_resetting_errors_entry() {
     // Reset AMS Error
     Reset_AMS_Error();
     variables.ams_error = RESET;
-
     return;
 }
 void FSM_BMS_HV_close_air_neg_entry() {

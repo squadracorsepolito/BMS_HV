@@ -56,8 +56,8 @@ void MX_GPIO_Init(void)
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOD, uC_GPIO_OUT_AIR_POS_COMMAND_Pin|uC_GPIO_OUT_AIR_NEG_COMMAND_Pin|uC_GPIO_OUT_STEF01FTR_Enable_Pin|SDC_GENERIC_SWITCH_GPIO_OUT_Pin
-                          |uC_GPIO_OUT_DCBUS_PRCH_RLY_COMMAND_Pin|L9963TH_TXEN_GPIO_OUT_Pin|L9963TH_ISOFREQ_GPIO_OUT_Pin|M95256_nS_GPIO_OUT_Pin
-                          |M95256_nW_GPIO_OUT_Pin, GPIO_PIN_RESET);
+                          |uC_GPIO_OUT_DCBUS_PRCH_RLY_COMMAND_Pin|L9963TH_TXEN_GPIO_OUT_Pin|L9963TH_ISOFREQ_GPIO_OUT_Pin|L9963TH_DIS_GPIO_INOUT_Pin
+                          |M95256_nS_GPIO_OUT_Pin|M95256_nW_GPIO_OUT_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, AMS_ERROR_Pin|L9963TL_ISOFREQ_GPIO_OUT_Pin|L9963TL_DIS_GPIO_INOUT_Pin, GPIO_PIN_RESET);
@@ -145,8 +145,10 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PDPin PDPin PDPin PDPin */
-  GPIO_InitStruct.Pin = L9963TH_TXEN_GPIO_OUT_Pin|L9963TH_ISOFREQ_GPIO_OUT_Pin|M95256_nS_GPIO_OUT_Pin|M95256_nW_GPIO_OUT_Pin;
+  /*Configure GPIO pins : PDPin PDPin PDPin PDPin
+                           PDPin */
+  GPIO_InitStruct.Pin = L9963TH_TXEN_GPIO_OUT_Pin|L9963TH_ISOFREQ_GPIO_OUT_Pin|L9963TH_DIS_GPIO_INOUT_Pin|M95256_nS_GPIO_OUT_Pin
+                          |M95256_nW_GPIO_OUT_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;

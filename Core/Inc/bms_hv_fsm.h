@@ -49,7 +49,13 @@ typedef struct {
     uint32_t vbattery_sum;
 } variables_t;
 
-void variables_update(variables_t* variables);
+typedef enum ActiveMode_Enum {
+    DRIVING_MODE = 0,
+    CHARGING_MODE = 1,
+    IDLE_MODE = 2 
+} ActiveMode_TypeDef;
+
+STMLIBS_StatusTypeDef variables_update(variables_t* variables);
 /**
  * @brief
  * @param handle FSM handle
