@@ -13,10 +13,7 @@
 
 #include "L9963E_interface.h"
 
-typedef enum {
-    L9963T_H = 0,
-    L9963T_L = 1
-} L9963T_PORT_T;
+typedef enum { L9963T_H = 0, L9963T_L = 1 } L9963T_PORT_T;
 
 L9963E_IF_PinState L9963TH_GPIO_ReadPin(L9963E_IF_PINS pin, L9963T_PORT_T port);
 L9963E_StatusTypeDef L9963TH_GPIO_WritePin(L9963E_IF_PINS pin, L9963T_PORT_T port, L9963E_IF_PinState state);

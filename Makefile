@@ -46,6 +46,7 @@ Core/Src/stm32f4xx_it.c \
 Core/Src/stm32_if.c \
 Core/Src/stm32f4xx_hal_msp.c \
 Core/Src/L9963_utils.c \
+Core/Src/ntc.c \
 Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_adc.c \
 Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_adc_ex.c \
 Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_ll_adc.c \

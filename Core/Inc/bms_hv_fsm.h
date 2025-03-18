@@ -13,24 +13,24 @@
 #define FSM_BMS_HV_H
 #define MAX_VOLTAGE ((uint16_t)600)
 
-#include "fsm.h"
 #include "L9963E.h"
+#include "fsm.h"
 
 enum FSM_BMS_HV_StateEnum {
-    FSM_BMS_HV_active_idle = 0,
-    FSM_BMS_HV_balancing = 1,
-    FSM_BMS_HV_charging_idle = 2,
-    FSM_BMS_HV_driving_idle = 3,
+    FSM_BMS_HV_active_idle              = 0,
+    FSM_BMS_HV_balancing                = 1,
+    FSM_BMS_HV_charging_idle            = 2,
+    FSM_BMS_HV_driving_idle             = 3,
     FSM_BMS_HV_resetting_airs_precharge = 4,
-    FSM_BMS_HV_resetting_errors = 5,
-    FSM_BMS_HV_closing_air_neg = 6,
-    FSM_BMS_HV_closing_precharge = 7,
-    FSM_BMS_HV_precharge = 8,
-    FSM_BMS_HV_closing_air_pos = 9,
-    FSM_BMS_HV_opening_precharge = 10,
-    FSM_BMS_HV_driving = 11,
-    FSM_BMS_HV_charging = 12,
-    FSM_BMS_HV_ams_imd_error = 13,
+    FSM_BMS_HV_resetting_errors         = 5,
+    FSM_BMS_HV_closing_air_neg          = 6,
+    FSM_BMS_HV_closing_precharge        = 7,
+    FSM_BMS_HV_precharge                = 8,
+    FSM_BMS_HV_closing_air_pos          = 9,
+    FSM_BMS_HV_opening_precharge        = 10,
+    FSM_BMS_HV_driving                  = 11,
+    FSM_BMS_HV_charging                 = 12,
+    FSM_BMS_HV_ams_imd_error            = 13,
 
     _FSM_BMS_HV_STATE_COUNT = 14,
 
@@ -49,13 +49,9 @@ typedef struct {
     uint32_t vbattery_sum;
 } variables_t;
 
-typedef enum ActiveMode_Enum {
-    DRIVING_MODE = 0,
-    CHARGING_MODE = 1,
-    IDLE_MODE = 2 
-} ActiveMode_TypeDef;
+typedef enum ActiveMode_Enum { DRIVING_MODE = 0, CHARGING_MODE = 1, IDLE_MODE = 2 } ActiveMode_TypeDef;
 
-STMLIBS_StatusTypeDef variables_update(variables_t* variables);
+STMLIBS_StatusTypeDef variables_update(variables_t *variables);
 /**
  * @brief
  * @param handle FSM handle
@@ -64,12 +60,10 @@ STMLIBS_StatusTypeDef variables_update(variables_t* variables);
  * @param transition_callback callback of a transition event
  * @return status
  */
-STMLIBS_StatusTypeDef FSM_BMS_HV_init(
-    FSM_HandleTypeDef *handle,
-    uint8_t event_count,
-    FSM_callback_function run_callback,
-    FSM_callback_function transition_callback
-);
+STMLIBS_StatusTypeDef FSM_BMS_HV_init(FSM_HandleTypeDef *handle,
+                                      uint8_t event_count,
+                                      FSM_callback_function run_callback,
+                                      FSM_callback_function transition_callback);
 
 // State functions
 
@@ -451,5 +445,4 @@ FSM_BMS_HV_StateTypeDef FSM_BMS_HV_ams_imd_error_do_work();
  */
 void FSM_BMS_HV_ams_imd_error_exit();
 
-
-#endif //FSM_BMS_HV_H
+#endif  //FSM_BMS_HV_H

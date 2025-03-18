@@ -15,23 +15,23 @@
 
 L9963E_IF_PinState L9963TH_GPIO_ReadPin(L9963E_IF_PINS pin, L9963T_PORT_T port) {
     L9963E_IF_PinState state = L9963E_IF_GPIO_PIN_RESET;
-        switch (pin) {
-            case L9963E_IF_CS:
-                state = HAL_GPIO_ReadPin(L9963TH_NCS_GPIO_OUT_GPIO_Port, L9963TH_NCS_GPIO_OUT_Pin);
-                break;
-            case L9963E_IF_TXEN:
-                state = HAL_GPIO_ReadPin(L9963TH_TXEN_GPIO_OUT_GPIO_Port, L9963TH_TXEN_GPIO_OUT_Pin);
-                break;
-            case L9963E_IF_BNE:
-                state = HAL_GPIO_ReadPin(L9963TH_BNE_GPIO_IN_GPIO_Port, L9963TH_BNE_GPIO_IN_Pin);
-                break;
-            case L9963E_IF_ISOFREQ:
-                state = HAL_GPIO_ReadPin(L9963TH_ISOFREQ_GPIO_OUT_GPIO_Port, L9963TH_ISOFREQ_GPIO_OUT_Pin);
-                break;
-            case L9963E_IF_DIS:
-                state = HAL_GPIO_ReadPin(L9963TH_DIS_GPIO_INOUT_GPIO_Port, L9963TH_DIS_GPIO_INOUT_Pin);
-                break;
-        }
+    switch (pin) {
+        case L9963E_IF_CS:
+            state = HAL_GPIO_ReadPin(L9963TH_NCS_GPIO_OUT_GPIO_Port, L9963TH_NCS_GPIO_OUT_Pin);
+            break;
+        case L9963E_IF_TXEN:
+            state = HAL_GPIO_ReadPin(L9963TH_TXEN_GPIO_OUT_GPIO_Port, L9963TH_TXEN_GPIO_OUT_Pin);
+            break;
+        case L9963E_IF_BNE:
+            state = HAL_GPIO_ReadPin(L9963TH_BNE_GPIO_IN_GPIO_Port, L9963TH_BNE_GPIO_IN_Pin);
+            break;
+        case L9963E_IF_ISOFREQ:
+            state = HAL_GPIO_ReadPin(L9963TH_ISOFREQ_GPIO_OUT_GPIO_Port, L9963TH_ISOFREQ_GPIO_OUT_Pin);
+            break;
+        case L9963E_IF_DIS:
+            state = HAL_GPIO_ReadPin(L9963TH_DIS_GPIO_INOUT_GPIO_Port, L9963TH_DIS_GPIO_INOUT_Pin);
+            break;
+    }
 
     return state == L9963E_IF_GPIO_PIN_RESET ? GPIO_PIN_RESET : GPIO_PIN_SET;  //convert lib state to stm state
 }
@@ -89,8 +89,6 @@ L9963E_StatusTypeDef L9963TH_SPI_Transmit(uint8_t *data, uint8_t size, uint8_t t
     }
 }
 
-
-
 L9963E_IF_PinState L9963TL_GPIO_ReadPin(L9963E_IF_PINS pin, L9963T_PORT_T port) {
     L9963E_IF_PinState state = L9963E_IF_GPIO_PIN_RESET;
     switch (pin) {
@@ -112,7 +110,6 @@ L9963E_IF_PinState L9963TL_GPIO_ReadPin(L9963E_IF_PINS pin, L9963T_PORT_T port) 
     }
     return state == L9963E_IF_GPIO_PIN_RESET ? GPIO_PIN_RESET : GPIO_PIN_SET;  //convert lib state to stm state
 }
-
 
 L9963E_StatusTypeDef L9963TL_GPIO_WritePin(L9963E_IF_PINS pin, L9963T_PORT_T port, L9963E_IF_PinState state) {
     GPIO_PinState stm_state = state == L9963E_IF_GPIO_PIN_RESET ? GPIO_PIN_RESET

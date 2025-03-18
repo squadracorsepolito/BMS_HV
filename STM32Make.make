@@ -82,6 +82,7 @@ Core/Src/bms_hv_fsm_weak.c \
 Core/Src/can.c \
 Core/Src/gpio.c \
 Core/Src/main.c \
+Core/Src/ntc.c \
 Core/Src/spi.c \
 Core/Src/stm32_if.c \
 Core/Src/stm32f4xx_hal_msp.c \
