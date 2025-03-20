@@ -50,7 +50,7 @@ typedef struct {
 } variables_t;
 
 typedef enum ActiveMode_Enum { DRIVING_MODE = 0, CHARGING_MODE = 1, IDLE_MODE = 2 } ActiveMode_TypeDef;
-// GIT COMMENT 
+
 STMLIBS_StatusTypeDef variables_update(variables_t *variables);
 /**
  * @brief
