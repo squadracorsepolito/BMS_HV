@@ -24,6 +24,7 @@ typedef enum {
 
 void L9963E_utils_init(void);
 void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio);
+void L9963E_utils_read_all_cells(uint8_t read_gpio);
 void L9963E_utils_get_module_mv(uint8_t module_id);
 float L9963E_utils_get_cell_mv(uint8_t module_id, uint8_t index);
 void L9963E_utils_get_batt_mv(float *v_tot, float *v_sum, uint8_t module);

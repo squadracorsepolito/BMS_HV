@@ -221,6 +221,13 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
     ntc_set_ext_data((uint16_t *)vgpio, N_GPIOS_PER_SLAVE, 0);
 }
 
+void L9963E_utils_read_all_cells(uint8_t read_gpio){
+    for (uint8_t i = 0; i < N_SLAVES; i++) {
+        L9963E_utils_read_cells(i, read_gpio);
+    }
+}
+
+
 uint16_t const *L9963E_utils_get_module_gpios(uint8_t module_id, uint8_t *len) {
     if (module_id >= N_SLAVES)
         return NULL;
