@@ -72,8 +72,9 @@ Core/Src/system_stm32f4xx.c \
 Core/Src/sysmem.c \
 Core/Src/syscalls.c \
 Core/Src/bms_hv_fsm.c \
-Lib/L9963E/L9963E.c \
-Lib/L9963E/L9963E_drv.c \
+Core/Src/bms_hv_fsm_weak.c \
+Lib/L9963E/src/L9963E.c \
+Lib/L9963E/src/L9963E_drv.c \
 Lib/stmlibs/fsm/fsm.c
 
 # ASM sources

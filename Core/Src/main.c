@@ -27,7 +27,11 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "L9963E.h"
+#include "L9963_utils.h"
+#include "bms_hv_fsm.h"
+#include "fsm.h"
+#include "stm32_if.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -58,7 +62,8 @@ void SystemClock_Config(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
+FSM_HandleTypeDef hfsm;
+L9963E_HandleTypeDef hl9963e;
 
 /* USER CODE END 0 */
 
@@ -77,6 +82,8 @@ int main(void) {
     HAL_Init();
 
     /* USER CODE BEGIN Init */
+    L9963E_utils_init();
+    
 
     /* USER CODE END Init */
 

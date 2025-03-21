@@ -15,10 +15,10 @@
 #endif  // __weak
 
 // L9963 initialization
-L9963E_HandleTypeDef *L9963E_handle;
+extern L9963E_HandleTypeDef hl9963e;
+
 uint16_t vbattery_monitor;
 uint32_t vbattery_sum;
-uint8_t n_slaves;
 
 // Variables
 extern uint8_t air_neg_int_state_closed, air_pos_int_state_closed, air_pos_mech_state_open, air_neg_mech_state_open,
@@ -31,7 +31,7 @@ ActiveMode_TypeDef active_mode             = IDLE_MODE;
 
 // Variable Update function
 STMLIBS_StatusTypeDef variables_update(variables_t *variables) {
-    if (L9963E_read_batt_voltage(L9963E_handle, n_slaves, &vbattery_monitor, &vbattery_sum) != L9963E_OK) {
+    if (L9963E_read_batt_voltage(&hl9963e, N_SLAVES, &vbattery_monitor, &vbattery_sum) != L9963E_OK) {
         return STMLIBS_ERROR;
     }
 
@@ -288,12 +288,22 @@ uint32_t _FSM_BMS_HV_balancing_event_handle(uint8_t event) {
             return _FSM_BMS_HV_DIE;
     }
 }
+// USER CODE OF BALANCING DO WORK
+FSM_BMS_HV_StateTypeDef FSM_BMS_HV_balancing_do_work() {
+    variables_update(&variables);
 
+    if (L9963E_balance_cells() != L9963_UTILS_OK) {
+        return FSM_BMS_HV_ams_imd_error;
+    }
+
+    return FSM_BMS_HV_active_idle;
+}
 /** @brief wrapper of FSM_BMS_HV_do_work, with exit state checking */
 uint32_t _FSM_BMS_HV_balancing_do_work() {
     uint32_t next = (uint32_t)FSM_BMS_HV_balancing_do_work();
 
     switch (next) {
+        case FSM_BMS_HV_balancing:
         case FSM_BMS_HV_active_idle:
         case FSM_BMS_HV_ams_imd_error:
             return next;

@@ -112,6 +112,8 @@ Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim.c \
 Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim_ex.c \
 Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.c \
 Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_ll_adc.c \
+Lib/L9963E/src/L9963E.c \
+Lib/L9963E/src/L9963E_drv.c \
 Lib/stmlibs/fsm/fsm.c
 
 

@@ -1,18 +1,13 @@
 #include "L9963_utils.h"
 
-#include "L9963E.h"
-#include "stm32_if.h"
-
 /* Using L9963TH to send and receive data
     L9963TL will be used to check the correctness of communication
 */
-volatile uint16_t vcells[N_CELLS_PER_SLAVE];
-volatile uint16_t vgpio[N_GPIOS_PER_SLAVE];
-volatile uint16_t vtot;
-volatile uint32_t vsumbatt;
-volatile uint16_t vmodules[N_SLAVES];
-
-L9963E_HandleTypeDef hl9963e;
+volatile uint16_t vcells[N_SLAVES][N_CELLS_PER_SLAVE];
+volatile uint16_t vgpio[N_SLAVES][N_GPIOS_PER_SLAVE];
+volatile uint16_t vtot[N_SLAVES];
+volatile uint32_t vsumbatt[N_SLAVES];
+extern L9963E_HandleTypeDef hl9963e;
 
 const L9963E_IfTypeDef interface_H = {.L9963E_IF_DelayMs       = DelayMs,
                                       .L9963E_IF_GetTickMs     = GetTickMs,
@@ -112,81 +107,160 @@ void L9963E_utils_init(void) {
 void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
     L9963E_StatusTypeDef e;
     uint8_t c_done;
+
     do {
         L9963E_poll_conversion(&hl9963e, module_id, &c_done);
     } while (!c_done);
+
     L9963E_start_conversion(&hl9963e, module_id, 0b000, read_gpio ? L9963E_GPIO_CONV : 0);
-    uint16_t enabled_cells = ENABLED_CELLS;
-    uint8_t enabled_gpios  = ENABLED_GPIOS;
+    
     uint16_t voltage       = 0;
     uint8_t d_rdy          = 0;
 
-    // Reading the voltage of each individual cell
-    uint8_t cell_id = 0;
-    while (enabled_cells) {
-        uint16_t current_cell = enabled_cells & -enabled_cells;
-
-        do {
-            e = L9963E_read_cell_voltage(&hl9963e, module_id, current_cell, &voltage, &d_rdy);
-        } while (e != L9963E_OK || !d_rdy);
-        vcells[cell_id] = voltage;
-
-        cell_id++;
-        enabled_cells &= enabled_cells - 1;
-    }
-
-    // Reading total battery voltage
+    /******* READING CELL VOLTAGE OF EACH INDIVIDUAL CELL *******/
     do {
-        e = L9963E_read_batt_voltage(&hl9963e, module_id, (uint16_t *)&vtot, (uint32_t *)&vsumbatt);
+        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL1, &voltage, &d_rdy);
+    } while (e != L9963E_OK || !d_rdy);
+    vcells[module_id][0] = voltage;
+
+    do {
+        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL2, &voltage, &d_rdy);
+    } while (e != L9963E_OK || !d_rdy);
+    vcells[module_id][1] = voltage;
+
+    do {
+        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL3, &voltage, &d_rdy);
+    } while (e != L9963E_OK || !d_rdy);
+    vcells[module_id][2] = voltage;
+
+    do {
+        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL4, &voltage, &d_rdy);
+    } while (e != L9963E_OK || !d_rdy);
+    vcells[module_id][3] = voltage;
+
+    do {
+        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL5, &voltage, &d_rdy);
+    } while (e != L9963E_OK || !d_rdy);
+    vcells[module_id][4] = voltage;
+
+    do {
+        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL6, &voltage, &d_rdy);
+    } while (e != L9963E_OK || !d_rdy);
+    vcells[module_id][5] = voltage;
+
+    do {
+        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL7, &voltage, &d_rdy);
+    } while (e != L9963E_OK || !d_rdy);
+    vcells[module_id][6] = voltage;
+
+    do {
+        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL8, &voltage, &d_rdy);
+    } while (e != L9963E_OK || !d_rdy);
+    vcells[module_id][7] = voltage;
+
+    do {
+        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL12, &voltage, &d_rdy);
+    } while (e != L9963E_OK || !d_rdy);
+    vcells[module_id][8] = voltage;
+
+    do {
+        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL13, &voltage, &d_rdy);
+    } while (e != L9963E_OK || !d_rdy);
+    vcells[module_id][9] = voltage;
+
+    do {
+        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL14, &voltage, &d_rdy);
+    } while (e != L9963E_OK || !d_rdy);
+    vcells[module_id][10] = voltage;
+
+    /******* READING TOTAL BATTERY VOLTAGES *******/
+    do {
+        e = L9963E_read_batt_voltage(
+            &hl9963e, module_id, ((uint16_t *)&(vtot[module_id])), ((uint32_t *)&(vsumbatt[module_id])));
     } while (e != L9963E_OK);
 
     if (!read_gpio)
         return;
 
-    // Reading GPIOs
-    uint8_t gpio_id = 0;
-    while (enabled_gpios) {
-        uint16_t current_gpio = enabled_gpios & -enabled_gpios;
+    /******* READING GPIO VOLTAGES *******/
+    do {
+        e = L9963E_read_gpio_voltage(&hl9963e, module_id, L9963E_GPIO3, &voltage, &d_rdy);
+    } while (e != L9963E_OK || !d_rdy);
+    vgpio[module_id][0] = voltage;
 
-        do {
-            e = L9963E_read_gpio_voltage(&hl9963e, module_id, current_gpio, &voltage, &d_rdy);
-        } while (e != L9963E_OK || !d_rdy);
-        vcells[gpio_id] = voltage;
+    do {
+        e = L9963E_read_gpio_voltage(&hl9963e, module_id, L9963E_GPIO4, &voltage, &d_rdy);
+    } while (e != L9963E_OK || !d_rdy);
+    vgpio[module_id][1] = voltage;
 
-        gpio_id++;
-        enabled_gpios &= enabled_gpios - 1;
-    }
+    do {
+        e = L9963E_read_gpio_voltage(&hl9963e, module_id, L9963E_GPIO5, &voltage, &d_rdy);
+    } while (e != L9963E_OK || !d_rdy);
+    vgpio[module_id][2] = voltage;
+
+    do {
+        e = L9963E_read_gpio_voltage(&hl9963e, module_id, L9963E_GPIO6, &voltage, &d_rdy);
+    } while (e != L9963E_OK || !d_rdy);
+    vgpio[module_id][3] = voltage;
+
+    do {
+        e = L9963E_read_gpio_voltage(&hl9963e, module_id, L9963E_GPIO7, &voltage, &d_rdy);
+    } while (e != L9963E_OK || !d_rdy);
+    vgpio[module_id][4] = voltage;
+
+    do {
+        e = L9963E_read_gpio_voltage(&hl9963e, module_id, L9963E_GPIO8, &voltage, &d_rdy);
+    } while (e != L9963E_OK || !d_rdy);
+    vgpio[module_id][5] = voltage;
+
+    do {
+        e = L9963E_read_gpio_voltage(&hl9963e, module_id, L9963E_GPIO9, &voltage, &d_rdy);
+    } while (e != L9963E_OK || !d_rdy);
+    vgpio[module_id][6] = voltage;
 
     ntc_set_ext_data((uint16_t *)vgpio, N_GPIOS_PER_SLAVE, 0);
 }
 
-uint16_t const *L9963E_utils_get_module_gpios(uint8_t *len) {
+uint16_t const *L9963E_utils_get_module_gpios(uint8_t module_id, uint8_t *len) {
+    if (module_id >= N_SLAVES)
+        return NULL;
     if (len)
         *len = N_GPIOS_PER_SLAVE;
-    return (uint16_t *)vgpio;
+    return (uint16_t *)vgpio[module_id];
 }
 
-uint16_t const *L9963E_utils_get_module_cells(uint8_t *len) {
+uint16_t const *L9963E_utils_get_module_cells(uint8_t module_id, uint8_t *len) {
+    if (module_id >= N_SLAVES)
+        return NULL;
     if (len)
         *len = N_CELLS_PER_SLAVE;
-    return (uint16_t *)vcells;
+    return (uint16_t *)vcells[module_id];
 }
 
-float L9963E_utils_get_cell_mv(uint8_t module, uint8_t index) {
-    return vcells[index] * 89e-3f;
+float L9963E_utils_get_cell_mv(uint8_t module_id, uint8_t index) {
+    return vcells[module_id][index] * 89e-3f;
 }
 
-void L9963E_utils_get_batt_mv(float *v_tot, float *v_sum) {
-    *v_tot = vtot * 1.33f;
-    *v_sum = vsumbatt * 89e-3f;
+void L9963E_utils_get_batt_mv(float *v_tot, float *v_sum, uint8_t module_id) {
+    *v_tot = vtot[module_id] * 1.33f;
+    *v_sum = vsumbatt[module_id] * 89e-3f;
+}
+
+void L9963E_utils_get_total_batt_mv(float *v_tot, float *v_sum) {
+    *v_tot = 0;
+    *v_sum = 0;
+    for (uint8_t i = 0; i < N_SLAVES; i++) {
+        *v_tot += vtot[i] * 1.33f;
+        *v_sum += vsumbatt[i] * 89e-3f;
+    }
 }
 
 // Timed balancing mode
-void L9963E_utils_balance_cells(void) {
+L9963_Utils_StatusTypeDef L9963E_utils_balance_cells(void) {
     uint8_t eof_bal                  = 0;
     uint8_t bal_on                   = 0;
     L9963E_BurstCmdTypeDef burst_cmd = _0x78BurstCmd;
-    L9963E_0x78BurstTypeDef burst_data;
+    L9963E_BurstUnionTypeDef burst_data[N_SLAVES];
     L9963E_RegisterUnionTypeDef bal1_conf_reg = {.generic = L9963E_BAL_1_DEFAULT};
 
     bal1_conf_reg.Bal_1.bal_start = 1;
@@ -194,15 +268,22 @@ void L9963E_utils_balance_cells(void) {
     L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_1_ADDR, &bal1_conf_reg, 10);
 
     // To check for eof_bal = 1 and bal_on = 0 to finish the balancing
-    while (!eof_bal && bal_on) {
-        L9963E_DRV_burst_cmd(
-            &hl9963e.drv_handle, L9963E_DEVICE_BROADCAST, burst_cmd, &burst_data, L9963E_BURST_0x78_LEN, 10);
-        eof_bal = burst_data.Frame17.eof_bal;
-        bal_on  = burst_data.Frame17.bal_on;
+    while ((eof_bal != N_SLAVES) && (bal_on != 0)) {
+        if (L9963E_DRV_burst_cmd(
+                &hl9963e.drv_handle, L9963E_DEVICE_BROADCAST, burst_cmd, burst_data, L9963E_BURST_0x78_LEN, 10) !=
+            L9963E_OK)
+            return L9963E_UTILS_ERROR;
+        eof_bal = 0;
+        bal_on  = 0;
+        for (uint8_t i = 0; i < N_SLAVES; i++) {
+            eof_bal += burst_data[i]._0x78.Frame17.eof_bal;
+            bal_on += burst_data[i]._0x78.Frame17.bal_on;
+        }
     }
 
     // Reset the balancing enable registers
     bal1_conf_reg.Bal_1.bal_start = 0;
     bal1_conf_reg.Bal_1.bal_stop  = 1;
     L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_1_ADDR, &bal1_conf_reg, 10);
+    return L9963_UTILS_OK;
 }

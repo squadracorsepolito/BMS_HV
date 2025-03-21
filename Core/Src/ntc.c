@@ -31,8 +31,8 @@ void ntc_init(void) {
     memset(ntc_dma_data, 0, sizeof(ntc_dma_data));
     memset(ntc_int_data, 0, sizeof(ntc_int_data));
     memset(ntc_ext_data, 0, sizeof(ntc_ext_data));
-
-    HAL_ADC_Start_DMA(&hadc2, (uint32_t *)ntc_dma_data, NTC_INT_ADC_N);
+    // Changed from adc2 to adc1
+    HAL_ADC_Start_DMA(&hadc1, (uint32_t *)ntc_dma_data, NTC_INT_ADC_N);
 }
 
 //every NTC_MEASURE_INTERVAL voltage measures, start gpio conversion too

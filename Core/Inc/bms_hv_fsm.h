@@ -14,7 +14,10 @@
 #define MAX_VOLTAGE ((uint16_t)600)
 
 #include "L9963E.h"
+#include "L9963_utils.h"
+#include "L9963E_drv.h"
 #include "fsm.h"
+#include "main.h"
 
 enum FSM_BMS_HV_StateEnum {
     FSM_BMS_HV_active_idle              = 0,
