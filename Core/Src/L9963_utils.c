@@ -264,29 +264,36 @@ void L9963E_utils_get_total_batt_mv(float *v_tot, float *v_sum) {
 
 // Timed balancing mode
 L9963_Utils_StatusTypeDef L9963E_utils_balance_cells(void) {
+    L9963E_StatusTypeDef e;
     uint8_t eof_bal                  = 0;
     uint8_t bal_on                   = 0;
-    L9963E_BurstCmdTypeDef burst_cmd = _0x78BurstCmd;
-    L9963E_BurstUnionTypeDef burst_data[N_SLAVES];
+    // L9963E_BurstCmdTypeDef burst_cmd = _0x78BurstCmd;
+    // L9963E_BurstUnionTypeDef burst_data[N_SLAVES];
     L9963E_RegisterUnionTypeDef bal1_conf_reg = {.generic = L9963E_BAL_1_DEFAULT};
 
     bal1_conf_reg.Bal_1.bal_start = 1;
     bal1_conf_reg.Bal_1.bal_stop  = 0;
     L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_1_ADDR, &bal1_conf_reg, 10);
 
+    // Check sequentially for each device if the balancing is finished
     // To check for eof_bal = 1 and bal_on = 0 to finish the balancing
-    while ((eof_bal != N_SLAVES) && (bal_on != 0)) {
-        if (L9963E_DRV_burst_cmd(
-                &hl9963e.drv_handle, L9963E_DEVICE_BROADCAST, burst_cmd, burst_data, L9963E_BURST_0x78_LEN, 10) !=
-            L9963E_OK)
-            return L9963E_UTILS_ERROR;
-        eof_bal = 0;
-        bal_on  = 0;
-        for (uint8_t i = 0; i < N_SLAVES; i++) {
-            eof_bal += burst_data[i]._0x78.Frame17.eof_bal;
-            bal_on += burst_data[i]._0x78.Frame17.bal_on;
-        }
+    for (uint8_t device_id = 0; device_id < N_SLAVES; device_id++) {
+        do {
+            e = L9963E_read_balancing_state(&hl9963e, device_id, &eof_bal, &bal_on);
+        } while (e != L9963E_OK || ((eof_bal != 1) || (bal_on != 0)));
     }
+    // while ((eof_bal != N_SLAVES) && (bal_on != 0)) {
+    //     if (L9963E_DRV_burst_cmd(
+    //             &hl9963e.drv_handle, L9963E_DEVICE_BROADCAST, burst_cmd, burst_data, L9963E_BURST_0x78_LEN, 10) !=
+    //         L9963E_OK)
+    //         return L9963E_UTILS_ERROR;
+    //     eof_bal = 0;
+    //     bal_on  = 0;
+    //     for (uint8_t i = 0; i < N_SLAVES; i++) {
+    //         eof_bal += burst_data[i]._0x78.Frame17.eof_bal;
+    //         bal_on += burst_data[i]._0x78.Frame17.bal_on;
+    //     }
+    // }
 
     // Reset the balancing enable registers
     bal1_conf_reg.Bal_1.bal_start = 0;

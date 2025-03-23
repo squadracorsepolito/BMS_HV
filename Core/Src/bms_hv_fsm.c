@@ -22,7 +22,9 @@ float vbattery_sum;
 
 // Variables
 extern uint8_t air_neg_int_state_closed, air_pos_int_state_closed, air_pos_mech_state_open, air_neg_mech_state_open,
-    ams_error, imd_error, dcbus_overvoltage, nstg_dcbus_overvoltage, charge_cmd, drive_cmd, balancing_cmd;
+ imd_error, dcbus_overvoltage, nstg_dcbus_overvoltage, charge_cmd, drive_cmd, balancing_cmd;
+
+uint8_t ams_error;
 
 variables_t variables;
 
@@ -46,6 +48,18 @@ STMLIBS_StatusTypeDef variables_update(variables_t *variables) {
 
     return STMLIBS_OK;
 }
+
+void run_callback_1(uint32_t state) {
+    ((void)0U);
+}
+
+void transition_callback_1(uint32_t state) {
+    ((void)0U);
+}
+
+extern uint8_t volatile error_code;
+
+
 // Private wrapper function signatures
 
 uint32_t _FSM_BMS_HV_active_idle_event_handle(uint8_t event);
@@ -300,7 +314,6 @@ uint32_t _FSM_BMS_HV_active_idle_do_work() {
     uint32_t next = (uint32_t)FSM_BMS_HV_active_idle_do_work();
 
     switch (next) {
-        case FSM_BMS_HV_active_idle:
         case FSM_BMS_HV_balancing:
         case FSM_BMS_HV_charging_idle:
         case FSM_BMS_HV_driving_idle:
@@ -339,7 +352,6 @@ uint32_t _FSM_BMS_HV_balancing_do_work() {
     uint32_t next = (uint32_t)FSM_BMS_HV_balancing_do_work();
 
     switch (next) {
-        case FSM_BMS_HV_balancing:
         case FSM_BMS_HV_active_idle:
         case FSM_BMS_HV_ams_imd_error:
             return next;

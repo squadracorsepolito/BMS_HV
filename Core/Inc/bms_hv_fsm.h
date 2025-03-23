@@ -19,6 +19,10 @@
 #include "fsm.h"
 #include "main.h"
 
+void run_callback_1(uint32_t state);
+void transition_callback_1(uint32_t state);
+
+
 enum FSM_BMS_HV_StateEnum {
     FSM_BMS_HV_active_idle              = 0,
     FSM_BMS_HV_balancing                = 1,

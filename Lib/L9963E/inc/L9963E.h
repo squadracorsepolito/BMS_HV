@@ -206,5 +206,17 @@ L9963E_StatusTypeDef L9963E_read_gpio_voltage(L9963E_HandleTypeDef *handle,
                                               L9963E_GpiosTypeDef gpio,
                                               uint16_t *vgpio,
                                               uint8_t *data_ready);
-
+/**
+ * @brief Reads the balancing state of the device.
+ * 
+ * @param handle Pointer to the L9963E handle structure.
+ * @param device Target device address.
+ * @param eof_bal_bit Pointer to the eof_bal bit.
+ * @param bal_on_bit Pointer to the bal_on bit.
+ * @return L9963E status (L9963E_OK on success, L9963E_ERROR on failure).
+ */
+L9963E_StatusTypeDef L9963E_read_balancing_state(L9963E_HandleTypeDef *handle,
+                                                uint8_t device,
+                                                uint8_t *eof_bal_bit,
+                                                uint8_t *bal_on_bit);
 #endif  // L9963E_H
