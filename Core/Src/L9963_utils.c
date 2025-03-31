@@ -1,4 +1,5 @@
 #include "L9963_utils.h"
+#include "ntc.h"
 
 /* Using L9963TH to send and receive data
     L9963TL will be used to check the correctness of communication

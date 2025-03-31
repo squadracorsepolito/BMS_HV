@@ -13,7 +13,7 @@
 #include "main.h"
 #include "spi.h"
 
-L9963E_IF_PinState L9963TH_GPIO_ReadPin(L9963E_IF_PINS pin, L9963T_PORT_T port) {
+L9963E_IF_PinState L9963TH_GPIO_ReadPin(L9963E_IF_PINS pin) {
     L9963E_IF_PinState state = L9963E_IF_GPIO_PIN_RESET;
     switch (pin) {
         case L9963E_IF_CS:
@@ -36,7 +36,7 @@ L9963E_IF_PinState L9963TH_GPIO_ReadPin(L9963E_IF_PINS pin, L9963T_PORT_T port) 
     return state == L9963E_IF_GPIO_PIN_RESET ? GPIO_PIN_RESET : GPIO_PIN_SET;  //convert lib state to stm state
 }
 
-L9963E_StatusTypeDef L9963TH_GPIO_WritePin(L9963E_IF_PINS pin, L9963T_PORT_T port, L9963E_IF_PinState state) {
+L9963E_StatusTypeDef L9963TH_GPIO_WritePin(L9963E_IF_PINS pin, L9963E_IF_PinState state) {
     GPIO_PinState stm_state = state == L9963E_IF_GPIO_PIN_RESET ? GPIO_PIN_RESET
                                                                 : GPIO_PIN_SET;  //convert lib state to stm state
     switch (pin) {
@@ -89,7 +89,7 @@ L9963E_StatusTypeDef L9963TH_SPI_Transmit(uint8_t *data, uint8_t size, uint8_t t
     }
 }
 
-L9963E_IF_PinState L9963TL_GPIO_ReadPin(L9963E_IF_PINS pin, L9963T_PORT_T port) {
+L9963E_IF_PinState L9963TL_GPIO_ReadPin(L9963E_IF_PINS pin) {
     L9963E_IF_PinState state = L9963E_IF_GPIO_PIN_RESET;
     switch (pin) {
         case L9963E_IF_CS:
@@ -111,7 +111,7 @@ L9963E_IF_PinState L9963TL_GPIO_ReadPin(L9963E_IF_PINS pin, L9963T_PORT_T port) 
     return state == L9963E_IF_GPIO_PIN_RESET ? GPIO_PIN_RESET : GPIO_PIN_SET;  //convert lib state to stm state
 }
 
-L9963E_StatusTypeDef L9963TL_GPIO_WritePin(L9963E_IF_PINS pin, L9963T_PORT_T port, L9963E_IF_PinState state) {
+L9963E_StatusTypeDef L9963TL_GPIO_WritePin(L9963E_IF_PINS pin, L9963E_IF_PinState state) {
     GPIO_PinState stm_state = state == L9963E_IF_GPIO_PIN_RESET ? GPIO_PIN_RESET
                                                                 : GPIO_PIN_SET;  //convert lib state to stm state
     switch (pin) {
