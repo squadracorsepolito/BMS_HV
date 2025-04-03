@@ -499,26 +499,27 @@ L9963E_StatusTypeDef L9963E_read_balancing_state(L9963E_HandleTypeDef *handle,
     uint8_t device,
     uint8_t *eof_bal_bit,
     uint8_t *bal_on_bit) {
-L9963E_StatusTypeDef errorcode             = L9963E_OK;
-L9963E_RegisterUnionTypeDef balCell6_1act_reg = {0};
+    L9963E_StatusTypeDef errorcode             = L9963E_OK;
+    L9963E_RegisterUnionTypeDef balCell6_1act_reg = {0};
 
-#if L9963E_DEBUG
-if (handle == NULL) {
-return L9963E_ERROR;
-}
-#endif
+    #if L9963E_DEBUG
+        if (handle == NULL) {
+        return L9963E_ERROR;
+        }
+    #endif
 
-if (device == L9963E_DEVICE_BROADCAST) {
-return L9963E_ERROR;
-}
+    if (device == L9963E_DEVICE_BROADCAST) {
+        return L9963E_ERROR;
+    }
 
-errorcode = L9963E_DRV_reg_read(&(handle->drv_handle), device, L9963E_BalCell6_1act_ADDR, &balCell6_1act_reg, 10);
+    errorcode = L9963E_DRV_reg_read(&(handle->drv_handle), device, L9963E_BalCell6_1act_ADDR, &balCell6_1act_reg, 10);
 
-if (errorcode != L9963E_OK)
-return errorcode;
+    if (errorcode != L9963E_OK)
+        return errorcode;
 
-*eof_bal_bit = balCell6_1act_reg.BalCell6_1act.eof_bal;
-*bal_on_bit = balCell6_1act_reg.BalCell6_1act.bal_on;
+    *eof_bal_bit = balCell6_1act_reg.BalCell6_1act.eof_bal;
+    *bal_on_bit = balCell6_1act_reg.BalCell6_1act.bal_on;
 
-return L9963E_OK;
-}
+    return L9963E_OK;
+    }
+

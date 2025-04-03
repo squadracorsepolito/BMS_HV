@@ -29,7 +29,7 @@ uint8_t ams_error;
 variables_t variables;
 
 static uint32_t resetting_error_entry_time = 0;
-ActiveMode_TypeDef active_mode             = IDLE_MODE;
+static ActiveMode_TypeDef active_mode   = IDLE_MODE;
 
 // Variable Update function
 STMLIBS_StatusTypeDef variables_update(variables_t *variables) {
@@ -228,7 +228,6 @@ void FSM_BMS_HV_resetting_errors_entry() {
     return;
 }
 void FSM_BMS_HV_close_air_neg_entry() {
-
     // Close Negative Air
     Close_Air_Neg();
     return;
@@ -283,29 +282,26 @@ FSM_BMS_HV_StateTypeDef FSM_BMS_HV_active_idle_do_work() {
 
     active_mode = IDLE_MODE;
 
-    if (variables.ams_error || variables.imd_error || variables.dcbus_overvoltage || variables.nstg_dcbus_overvoltage \
+    if (variables.ams_error || variables.dcbus_overvoltage || variables.nstg_dcbus_overvoltage \
     || vbattery_monitor < 0 || vbattery_monitor > MAX_VOLTAGE) {
         ams_error = SET;
         Set_AMS_Error();
         return FSM_BMS_HV_ams_imd_error;
     }
+    if (variables.imd_error) return FSM_BMS_HV_ams_imd_error;
 
-    if ((variables.charge_cmd && variables.drive_cmd) || (variables.charge_cmd && variables.balancing_cmd) || (variables.drive_cmd && variables.balancing_cmd)) {
-        Set_AMS_Error();
-        ams_error = SET;
-        return FSM_BMS_HV_ams_imd_error;
-    }
+    // if ((variables.charge_cmd && variables.drive_cmd) || (variables.charge_cmd && variables.balancing_cmd) || (variables.drive_cmd && variables.balancing_cmd)) {
+    //     Set_AMS_Error();
+    //     ams_error = SET;
+    //     return FSM_BMS_HV_ams_imd_error;
+    // }
 
 
-    if (variables.charge_cmd) {
-        return FSM_BMS_HV_charging_idle;
-    }
-    if (variables.drive_cmd) {
-        return FSM_BMS_HV_driving_idle;
-    }
-    if (variables.balancing_cmd) {
-        return FSM_BMS_HV_balancing;
-    }
+    if (variables.charge_cmd)   return FSM_BMS_HV_charging_idle;
+
+    if (variables.drive_cmd)    return FSM_BMS_HV_driving_idle;
+    
+    if (variables.balancing_cmd)    return FSM_BMS_HV_balancing;
 
     return FSM_BMS_HV_active_idle;
 }
@@ -343,8 +339,10 @@ FSM_BMS_HV_StateTypeDef FSM_BMS_HV_balancing_do_work() {
 
     if (L9963E_utils_balance_cells() != L9963_UTILS_OK) {
         return FSM_BMS_HV_ams_imd_error;
+        balancing_cmd = RESET;
     }
 
+    balancing_cmd = RESET;
     return FSM_BMS_HV_active_idle;
 }
 /** @brief wrapper of FSM_BMS_HV_do_work, with exit state checking */

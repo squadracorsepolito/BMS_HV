@@ -245,6 +245,10 @@ uint16_t const *L9963E_utils_get_module_cells(uint8_t module_id, uint8_t *len) {
     return (uint16_t *)vcells[module_id];
 }
 
+uint16_t const *L9963E_utils_get_all__cells(){
+    return (uint16_t *)vcells;
+}
+
 float L9963E_utils_get_cell_mv(uint8_t module_id, uint8_t index) {
     return vcells[module_id][index] * 89e-3f;
 }
