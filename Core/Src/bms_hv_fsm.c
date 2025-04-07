@@ -14,8 +14,6 @@
 #define __weak __attribute__((weak))
 #endif  // __weak
 
-// L9963 initialization
-extern L9963E_HandleTypeDef hl9963e;
 
 float vbattery_monitor;
 float vbattery_sum;

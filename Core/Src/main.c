@@ -32,6 +32,8 @@
 #include "bms_hv_fsm.h"
 #include "fsm.h"
 #include "stm32_if.h"
+#include "data_reading_timebase.h"
+#include "ntc.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -63,7 +65,6 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 FSM_HandleTypeDef hfsm;
-L9963E_HandleTypeDef hl9963e;
 uint8_t volatile error_code = 30;
 uint8_t air_neg_int_state_closed, air_pos_int_state_closed, air_pos_mech_state_open, air_neg_mech_state_open,
  imd_error, dcbus_overvoltage, nstg_dcbus_overvoltage, charge_cmd, drive_cmd, balancing_cmd;
@@ -89,15 +90,17 @@ int main(void)
 
   /* USER CODE BEGIN Init */
     L9963E_utils_init();
-      //fsm
-      uint8_t n_events = 0;
+    //fsm
+    uint8_t n_events = 0;
 
-      if (FSM_BMS_HV_init(&hfsm, n_events, run_callback_1, transition_callback_1) != STMLIBS_OK) {
-          error_code = 2;
-      }
-      if (FSM_start(&hfsm) != STMLIBS_OK) {
-          error_code = 2;
-      }
+    if (FSM_BMS_HV_init(&hfsm, n_events, run_callback_1, transition_callback_1) != STMLIBS_OK) {
+        error_code = 2;
+    }
+    if (FSM_start(&hfsm) != STMLIBS_OK) {
+        error_code = 2;
+    }
+    data_reading_timebase_init();
+    ntc_init();
     
     
   /* USER CODE END Init */
@@ -126,6 +129,7 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
     while (1) {
+      data_reading_timebase_routine();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
