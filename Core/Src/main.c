@@ -66,8 +66,7 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 FSM_HandleTypeDef hfsm;
 uint8_t volatile error_code = 30;
-uint8_t air_neg_int_state_closed, air_pos_int_state_closed, air_pos_mech_state_open, air_neg_mech_state_open,
- imd_error, dcbus_overvoltage, nstg_dcbus_overvoltage, charge_cmd, drive_cmd, balancing_cmd;
+uint8_t charge_cmd, drive_cmd, balancing_cmd;
 /* USER CODE BEGIN 0 */
 
 /* USER CODE END 0 */
@@ -99,6 +98,15 @@ int main(void)
     if (FSM_start(&hfsm) != STMLIBS_OK) {
         error_code = 2;
     }
+    if (FSM_get_state(&hfsm) == FSM_BMS_HV_active_idle){
+      // If first state is active idle then we good
+      Warn_LED_On();
+      HAL_Delay(1000);
+      Warn_LED_Off();
+    } else {
+      Err_LED_On();
+    }
+
     data_reading_timebase_init();
     ntc_init();
     
@@ -130,6 +138,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
     while (1) {
       data_reading_timebase_routine();
+      FSM_routine(&hfsm);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

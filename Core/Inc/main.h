@@ -233,6 +233,9 @@ void Error_Handler(void);
 /* DC BUS signals*/
 #define DCBUS_Over60V()     ((uint8_t)HAL_GPIO_ReadPin(nDCBUS_OVER_60V_3V3_GPIO_Port, nDCBUS_OVER_60V_3V3_Pin))
 #define STG_DCBUS_Over60V() ((uint8_t)HAL_GPIO_ReadPin(nSTG_DCBUS_OVER60_3V3_GPIO_Port, nSTG_DCBUS_OVER60_3V3_Pin))
+#define PRCH_closed()       ((uint8_t)HAL_GPIO_ReadPin(DCBUS_PRCH_RLY_INT_STATE_CLOSED_3V3_GPIO_Port, DCBUS_PRCH_RLY_INT_STATE_CLOSED_3V3_Pin))
+#define DCBUS_Rly_Implausibility() ((uint8_t)HAL_GPIO_ReadPin(FB_DCBUS_RLY_IMPLAUSIBILITY_3V3_GPIO_Port, FB_DCBUS_RLY_IMPLAUSIBILITY_3V3_Pin))
+
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

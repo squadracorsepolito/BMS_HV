@@ -253,17 +253,17 @@ float L9963E_utils_get_cell_mv(uint8_t module_id, uint8_t index) {
     return vcells[module_id][index] * 89e-3f;
 }
 
-void L9963E_utils_get_batt_mv(float *v_tot, float *v_sum, uint8_t module_id) {
-    *v_tot = vtot[module_id] * 1.33f;
-    *v_sum = vsumbatt[module_id] * 89e-3f;
+void L9963E_utils_get_batt_mv(float *v_tot_module, float *v_sum_module, uint8_t module_id) {
+    *v_tot_module = vtot[module_id] * 1.33f;
+    *v_sum_module = vsumbatt[module_id] * 89e-3f;
 }
 
-void L9963E_utils_get_total_batt_mv(float *v_tot, float *v_sum) {
-    *v_tot = 0;
-    *v_sum = 0;
+void L9963E_utils_get_total_batt_mv(float *v_battery_monitor, float *v_battery_sum) {
+    *v_battery_monitor = 0;
+    *v_battery_sum = 0;
     for (uint8_t i = 0; i < N_SLAVES; i++) {
-        *v_tot += vtot[i] * 1.33f;
-        *v_sum += vsumbatt[i] * 89e-3f;
+        *v_battery_monitor += vtot[i] * 1.33f;
+        *v_battery_sum += vsumbatt[i] * 89e-3f;
     }
 }
 
