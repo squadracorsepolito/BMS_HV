@@ -6,7 +6,7 @@
 # - entry_2
 
 # The project name
-target: bms_hv_fsm
+target: BMS_HV
 # Can be C or C++
 language: C
 
@@ -74,12 +74,17 @@ excludes:
 # Include directories (directories containing .h or .hpp files)
 # If a CubeMX makefile is present it will automatically include the include directories from that makefile.
 includeDirectories: 
-  - Inc/**
   - Core/Inc/**
-  - Core/Lib/**
+  - Lib/**
   - Src/**
-  - Core/Src/**
+  - Drivers/**
+  - Drivers/STM32F4xx_HAL_Driver/Inc/**
+  - Drivers/STM32F4xx_HAL_Driver/Src/**
+  - Drivers/STM32F4xx_HAL_Driver/Inc/Legacy/**
   - Core/Lib/**
+  - Lib/stmlibs/fsm
+  - Lib/stmlibs/timer_utils
+  - Lib/stmlibs/timebase
 
 
 # Files that should be included in the compilation.
@@ -91,6 +96,9 @@ sourceFiles:
   - Src/**
   - Core/Src/**
   - Core/Lib/**
+  - Lib/stmlibs/fsm/**
+  - Lib/stmlibs/timer_utils/**
+  - Lib/stmlibs/timebase/**
 
 
 # When no makefile is present it will show a warning pop-up.
