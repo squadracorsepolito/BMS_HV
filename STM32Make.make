@@ -31,7 +31,7 @@ endif
 ######################################
 # This is the name of the embedded target which will be build
 # The final file name will also have debug or release appended to it.
-TARGET ?= bms_hv_fsm
+TARGET ?= BMS_HV
 
 #######################################
 # Build directories
@@ -80,6 +80,7 @@ Core/Src/adc.c \
 Core/Src/bms_hv_fsm.c \
 Core/Src/bms_hv_fsm_weak.c \
 Core/Src/can.c \
+Core/Src/data_reading_timebase.c \
 Core/Src/gpio.c \
 Core/Src/main.c \
 Core/Src/ntc.c \
@@ -90,6 +91,7 @@ Core/Src/stm32f4xx_it.c \
 Core/Src/syscalls.c \
 Core/Src/sysmem.c \
 Core/Src/system_stm32f4xx.c \
+Core/Src/tim.c \
 Core/Src/usart.c \
 Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.c \
 Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_adc.c \
@@ -114,7 +116,9 @@ Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.c \
 Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_ll_adc.c \
 Lib/L9963E/src/L9963E.c \
 Lib/L9963E/src/L9963E_drv.c \
-Lib/stmlibs/fsm/fsm.c
+Lib/stmlibs/fsm/fsm.c \
+Lib/stmlibs/timebase/timebase.c \
+Lib/stmlibs/timer_utils/timer_utils.c
 
 
 CXX_SOURCES = \
@@ -214,7 +218,15 @@ C_INCLUDES =  \
 -IDrivers/STM32F4xx_HAL_Driver/Inc/Legacy \
 -ILib/L9963E/inc \
 -ILib/stmlibs \
--ILib/stmlibs/fsm
+-ILib/stmlibs/circular_buffer \
+-ILib/stmlibs/critical_section \
+-ILib/stmlibs/digital_filters/iir_filter \
+-ILib/stmlibs/digital_filters/median_filter \
+-ILib/stmlibs/fsm \
+-ILib/stmlibs/lock \
+-ILib/stmlibs/logger \
+-ILib/stmlibs/timebase \
+-ILib/stmlibs/timer_utils
 
 
 

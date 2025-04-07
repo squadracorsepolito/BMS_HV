@@ -34,6 +34,8 @@
 #include "stm32_if.h"
 #include "data_reading_timebase.h"
 #include "ntc.h"
+#include "timebase.h"
+#include "timer_utils.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -64,11 +66,10 @@ void SystemClock_Config(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
 FSM_HandleTypeDef hfsm;
 uint8_t volatile error_code = 30;
 uint8_t charge_cmd, drive_cmd, balancing_cmd;
-/* USER CODE BEGIN 0 */
-
 /* USER CODE END 0 */
 
 /**
