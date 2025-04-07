@@ -6,6 +6,9 @@
 
 #define OVERVOLTAGE_TRESHOLD 4.2f
 
+// CHANGE OVERTEMPERATURE LATER
+#define OVERTEMPERATURE_TRESHOLD 3.0f
+
 void data_reading_timebase_init(void);
 void data_reading_timebase_routine(void);
 void data_reading_timebase_timerElapsed_irq(TIM_HandleTypeDef *htim);

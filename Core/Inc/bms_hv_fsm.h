@@ -50,10 +50,12 @@ typedef enum FSM_BMS_HV_StateEnum FSM_BMS_HV_StateTypeDef;
 typedef struct {
     uint8_t air_neg_int_state_closed, air_pos_int_state_closed;
     uint8_t air_pos_mech_state_open, air_neg_mech_state_open;
+    uint8_t prch_closed;
+    uint8_t dcbus_rly_implausibility;
     uint8_t ams_error, imd_error;
     uint8_t dcbus_overvoltage, nstg_dcbus_overvoltage, charge_cmd, drive_cmd, balancing_cmd;
-    uint16_t vbattery_monitor;
-    uint32_t vbattery_sum;
+    float vbattery_monitor;
+    float vbattery_sum;
 } variables_t;
 
 typedef enum ActiveMode_Enum { DRIVING_MODE = 0, CHARGING_MODE = 1, IDLE_MODE = 2 } ActiveMode_TypeDef;
