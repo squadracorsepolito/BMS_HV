@@ -47,6 +47,7 @@ Core/Src/stm32_if.c \
 Core/Src/stm32f4xx_hal_msp.c \
 Core/Src/L9963_utils.c \
 Core/Src/ntc.c \
+Core/Src/data_reading_timebase.c \
 Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_adc.c \
 Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_adc_ex.c \
 Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_ll_adc.c \
@@ -75,9 +76,11 @@ Core/Src/bms_hv_fsm.c \
 Core/Src/bms_hv_fsm_weak.c \
 Lib/L9963E/src/L9963E.c \
 Lib/L9963E/src/L9963E_drv.c \
-Lib/stmlibs/fsm/fsm.c	\ \
+Lib/stmlibs/fsm/fsm.c	\
 Lib/stmlibs/timebase/timebase.c \
-Core/Src/tim.c
+Core/Src/tim.c \
+Lib/stmlibs/timer_utils/timer_utils.c \
+
 
 # ASM sources
 ASM_SOURCES =  \
@@ -145,7 +148,8 @@ C_INCLUDES =  \
 -ILib/L9963E/inc \
 -ILib/stmlibs/fsm \
 -ILib/stmlibs \
--ILib/stmlibs/timebase
+-ILib/stmlibs/timebase \
+-ILib/stmlibs/timer_utils \
 
 # compile gcc flags
 ASFLAGS = $(MCU) $(AS_DEFS) $(AS_INCLUDES) $(OPT) -Wall -fdata-sections -ffunction-sections

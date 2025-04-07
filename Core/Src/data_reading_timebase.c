@@ -1,8 +1,11 @@
 #include "data_reading_timebase.h"
 #include "L9963_utils.h"
-
+#include "ntc.h"
 TIMEBASE_HandleTypeDef data_reading_timebase_handle;
-extern L9963E_HandleTypeDef hl9963e;
+extern volatile uint16_t vcells[N_SLAVES][N_CELLS_PER_SLAVE];
+extern volatile uint16_t vgpio[N_SLAVES][N_GPIOS_PER_SLAVE];
+extern uint8_t ams_error;
+
 
 void data_reading_timebase_init(void) {
     uint8_t interval;
@@ -13,19 +16,28 @@ void data_reading_timebase_init(void) {
     TIMEBASE_register_callback(&data_reading_timebase_handle, interval, data_reading_l9963e_cb);
   }
 
-L9963_Utils_StatusTypeDef data_reading_l9963e_cb(L9963E_HandleTypeDef* hl9963e){
+// Induce AMS ERROR if there is a overvoltage for 500 ms
+STMLIBS_StatusTypeDef data_reading_l9963e_cb(){
     uint8_t is_ntc_measure_required = ntc_is_measure_ext_time();
+    static uint8_t overvoltage_count[N_SLAVES][N_CELLS_PER_SLAVE] = {0};
     L9963E_utils_read_all_cells(is_ntc_measure_required);
-    uint16_t const *v_cells;
-
-    v_cells = L9963E_utils_get_all_cells();
 
     for (uint8_t i = 0; i < N_SLAVES; i++){
         for (uint8_t j = 0; j < N_CELLS_PER_SLAVE; j++){
-            if (v_cells[i][j] > MAX_VOLTAGE * 89e-3f){
-                return L9963E_UTILS_ERROR;
+            if (vcells[i][j] > OVERVOLTAGE_TRESHOLD){
+                overvoltage_count[i][j]++;
+                if (overvoltage_count[i][j] > 500){
+                    ams_error = SET;
+                }
+            } else {
+                overvoltage_count[i][j] = 0;
             }
         }
     }
+    return STMLIBS_OK;
 
+}
+
+void data_reading_timebase_routine(void) {
+    TIMEBASE_routine(&data_reading_timebase_handle);
 }

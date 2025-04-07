@@ -8,7 +8,7 @@ volatile uint16_t vcells[N_SLAVES][N_CELLS_PER_SLAVE];
 volatile uint16_t vgpio[N_SLAVES][N_GPIOS_PER_SLAVE];
 volatile uint16_t vtot[N_SLAVES];
 volatile uint32_t vsumbatt[N_SLAVES];
-extern L9963E_HandleTypeDef hl9963e;
+L9963E_HandleTypeDef hl9963e;
 
 const L9963E_IfTypeDef interface_H = {.L9963E_IF_DelayMs       = DelayMs,
                                       .L9963E_IF_GetTickMs     = GetTickMs,
