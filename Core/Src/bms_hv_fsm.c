@@ -276,7 +276,8 @@ void FSM_BMS_HV_resetting_airs_precharge_entry() {
 }
 void FSM_BMS_HV_ams_imd_error_entry() {
     // Open Precharge
-    SDC_On();
+    SDC_On(); // Change to SDC open and SDC Close
+    // When we close the SDC car can work
     Err_LED_On();
     return;
 }

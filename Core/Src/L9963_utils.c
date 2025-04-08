@@ -25,9 +25,13 @@ const L9963E_IfTypeDef interface_L = {.L9963E_IF_DelayMs       = DelayMs,
                                       .L9963E_IF_SPI_Transmit  = L9963TL_SPI_Transmit};
 
 // TRYING TO FIGURE OUT HOW TO INITIALIZE THE DRIVER HANDLE
-void L9963E_utils_init(void) {
-    L9963E_init(&hl9963e, interface_H, N_SLAVES);
-    L9963E_addressing_procedure(&hl9963e, 0b11, 1, 0b00, 1);
+L9963_Utils_StatusTypeDef L9963E_utils_init(void) {
+    if (L9963E_init(&hl9963e, interface_H, N_SLAVES) != L9963E_OK) {
+        return L9963E_UTILS_ERROR;
+    }
+    if (L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0b00, 0) != L9963E_OK) {
+        return L9963E_UTILS_ERROR;
+    }
 
     /** Configuring the chips by writing to the registers, since each chip 
         has the same configuration, we are using Broadcast access 
@@ -103,6 +107,7 @@ void L9963E_utils_init(void) {
         &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_BalCell6_1act_ADDR, &bal_cell6_1act, 10);
     L9963E_DRV_reg_write(
         &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_BalCell14_7act_ADDR, &bal_cell14_7act, 10);
+    return L9963_UTILS_OK;
 }
 
 void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {

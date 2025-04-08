@@ -70,6 +70,8 @@ void SystemClock_Config(void);
 FSM_HandleTypeDef hfsm;
 uint8_t volatile error_code = 30;
 uint8_t charge_cmd, drive_cmd, balancing_cmd;
+FSM_BMS_HV_StateTypeDef current_state;
+L9963_Utils_StatusTypeDef utils_status = L9963E_UTILS_ERROR;
 /* USER CODE END 0 */
 
 /**
@@ -89,24 +91,33 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-    L9963E_utils_init();
+    // do {
+    //   utils_status = L9963E_utils_init(); 
+    //   Err_LED_On();
+    //   HAL_Delay(500);
+    // } while (utils_status != L9963_UTILS_OK);
+
+    // Err_LED_Off();
+      
     //fsm
     uint8_t n_events = 0;
 
     if (FSM_BMS_HV_init(&hfsm, n_events, run_callback_1, transition_callback_1) != STMLIBS_OK) {
         error_code = 2;
     }
+    current_state = FSM_get_state(&hfsm);
     if (FSM_start(&hfsm) != STMLIBS_OK) {
         error_code = 2;
     }
-    if (FSM_get_state(&hfsm) == FSM_BMS_HV_active_idle){
-      // If first state is active idle then we good
-      Warn_LED_On();
-      HAL_Delay(1000);
-      Warn_LED_Off();
-    } else {
-      Err_LED_On();
-    }
+    current_state = FSM_get_state(&hfsm);
+    // if (FSM_get_state(&hfsm) == FSM_BMS_HV_active_idle){
+    //   // If first state is active idle then we good
+    //   Warn_LED_On();
+    //   HAL_Delay(1000);
+    //   Warn_LED_Off();
+    // } else {
+    //   Err_LED_On();
+    // }
 
     data_reading_timebase_init();
     ntc_init();
@@ -132,14 +143,35 @@ int main(void)
   MX_USART3_UART_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
-    Stat1_LED_On(); // Turn on the LED
+  utils_status = L9963E_utils_init();
+  if (utils_status != L9963_UTILS_OK) {
+    Err_LED_On();
+  } else {
+    Warn_LED_On();
+  }
+
+  // Err_LED_Off();
+  //   Stat1_LED_On(); // Turn on the LED
+  //   Warn_LED_On();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
     while (1) {
-      data_reading_timebase_routine();
-      FSM_routine(&hfsm);
+      // if (FSM_get_state(&hfsm) == FSM_BMS_HV_active_idle){
+      //   // If first state is active idle then we good
+      //   Warn_LED_On();
+      //   HAL_Delay(1000);
+      //   Warn_LED_Off();
+      // } else {
+      //   Err_LED_On();
+      // }
+      // uint8_t dummy_byte = 0x11;
+      // HAL_SPI_Transmit(&hspi3, (uint8_t *)&dummy_byte, 1, 100);
+      // HAL_Delay(1000);
+      // data_reading_timebase_routine();
+      // FSM_routine(&hfsm);
+      // current_state = FSM_get_state(&hfsm);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

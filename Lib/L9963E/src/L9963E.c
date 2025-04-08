@@ -51,6 +51,7 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
         read_reg.generic  = 0;
 
         //readback, if successful continue, else repeat the same cycle
+        // Changed timeout to check
         if (L9963E_DRV_reg_read(&(handle->drv_handle), x, L9963E_DEV_GEN_CFG_ADDR, &read_reg, 10) == L9963E_OK &&
             read_reg.DEV_GEN_CFG.chip_ID == x) {
             ++x;

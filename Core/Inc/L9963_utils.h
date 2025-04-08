@@ -7,7 +7,8 @@
 #define L9963_UTILS_H
 
 #define T_WAKE_UP         ((uint32_t)2)
-#define N_SLAVES          ((uint8_t)12)
+// CHANGE LATER
+#define N_SLAVES          ((uint8_t)1)
 #define N_CELLS_PER_SLAVE ((uint8_t)11)
 #define N_GPIOS_PER_SLAVE ((uint8_t)6)
 #define ENABLED_CELLS                                                                                         \
@@ -22,7 +23,7 @@ typedef enum {
     L9963E_UTILS_ERROR,
 } L9963_Utils_StatusTypeDef;
 
-void L9963E_utils_init(void);
+L9963_Utils_StatusTypeDef L9963E_utils_init(void);
 void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio);
 void L9963E_utils_read_all_cells(uint8_t read_gpio);
 void L9963E_utils_get_module_mv(uint8_t module_id);

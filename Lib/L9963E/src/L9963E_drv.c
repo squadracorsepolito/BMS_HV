@@ -13,7 +13,7 @@
 
 #include <stddef.h>
 #include <string.h>
-
+#include "main.h"// delete later
 #define WORD_LEN           40UL
 #define CRC_LEN            6UL
 #define CRC_POLY           (uint64_t)0x0000000000000059 /*L9963 CRC Poly:x^3+x^2+x+1*/
@@ -259,7 +259,7 @@ L9963E_StatusTypeDef _L9963E_DRV_reg_cmd(L9963E_DRV_HandleTypeDef *handle,
                                          L9963E_RegisterUnionTypeDef *data,
                                          uint8_t timeout) {
     union L9963E_DRV_FrameUnion frame;
-    L9963E_StatusTypeDef errorcode = L9963E_OK;
+    volatile L9963E_StatusTypeDef errorcode = L9963E_OK;
     uint8_t raw[5];
 
 #if L9963E_DEBUG
