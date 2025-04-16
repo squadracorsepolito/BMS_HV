@@ -9,7 +9,7 @@
  */
 
 #include "L9963E.h"
-
+#include "main.h"
 #include <memory.h>
 #include <stddef.h>
 
@@ -55,11 +55,15 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
         if (L9963E_DRV_reg_read(&(handle->drv_handle), x, L9963E_DEV_GEN_CFG_ADDR, &read_reg, 10) == L9963E_OK &&
             read_reg.DEV_GEN_CFG.chip_ID == x) {
             ++x;
-            tick = L9963E_DRV_GETTICK(&(handle->drv_handle));
-        } else {
+            tick = L9963E_DRV_GETTICK(&(handle->drv_handle)); 
+            Warn_LED_On();
+
+        }
+         else {
             if (L9963E_DRV_GETTICK(&(handle->drv_handle)) - tick >= 10) {
                 return L9963E_TIMEOUT;
             }
+            // uncomment tomorrow or change the timeout here (on top)
 
             //wakeup the device
             L9963E_DRV_wakeup(&(handle->drv_handle));
@@ -75,6 +79,7 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
             L9963E_DRV_reg_write(
                 &(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
         }
+
     }
 
     write_reg.generic                    = L9963E_DEV_GEN_CFG_DEFAULT;
@@ -364,7 +369,7 @@ L9963E_StatusTypeDef L9963E_read_cell_voltage(L9963E_HandleTypeDef *handle,
             break;
     }
 
-    errorcode = L9963E_DRV_reg_read(&(handle->drv_handle), device, addr, &vcell_meas_reg, 10);
+    errorcode = L9963E_DRV_reg_read(&(handle->drv_handle), device, addr, &vcell_meas_reg, 100);
 
     if (errorcode != L9963E_OK)
         return errorcode;

@@ -24,12 +24,12 @@ const L9963E_IfTypeDef interface_L = {.L9963E_IF_DelayMs       = DelayMs,
                                       .L9963E_IF_SPI_Receive   = L9963TL_SPI_Receive,
                                       .L9963E_IF_SPI_Transmit  = L9963TL_SPI_Transmit};
 
-// TRYING TO FIGURE OUT HOW TO INITIALIZE THE DRIVER HANDLE
 L9963_Utils_StatusTypeDef L9963E_utils_init(void) {
-    if (L9963E_init(&hl9963e, interface_H, N_SLAVES) != L9963E_OK) {
+    if (L9963E_init(&hl9963e, interface_H, 1) != L9963E_OK) {
         return L9963E_UTILS_ERROR;
     }
-    if (L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0b00, 0) != L9963E_OK) {
+
+    if (L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1) != L9963E_OK ){
         return L9963E_UTILS_ERROR;
     }
 
@@ -111,7 +111,7 @@ L9963_Utils_StatusTypeDef L9963E_utils_init(void) {
 }
 
 void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
-    L9963E_StatusTypeDef e;
+    volatile L9963E_StatusTypeDef e;
     uint8_t c_done;
 
     do {
@@ -228,7 +228,7 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
 }
 
 void L9963E_utils_read_all_cells(uint8_t read_gpio){
-    for (uint8_t i = 0; i < N_SLAVES; i++) {
+    for (uint8_t i = 1; i <= N_SLAVES; i++) {
         L9963E_utils_read_cells(i, read_gpio);
     }
 }

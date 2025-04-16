@@ -11,9 +11,10 @@
 
 #include "L9963E_drv.h"
 
+#include "main.h"  // delete later
+
 #include <stddef.h>
 #include <string.h>
-#include "main.h"// delete later
 #define WORD_LEN           40UL
 #define CRC_LEN            6UL
 #define CRC_POLY           (uint64_t)0x0000000000000059 /*L9963 CRC Poly:x^3+x^2+x+1*/
@@ -131,6 +132,7 @@ void _L9963E_DRV_switch_endianness(uint8_t *in, uint8_t *out) {
 
     return;
 }
+//     _L9963E_DRV_build_frame(raw, 1, is_write ? 1 : 0, device, address, is_write ? data->generic : 0);
 
 L9963E_StatusTypeDef _L9963E_DRV_build_frame(uint8_t *out,
                                              uint8_t pa,
@@ -273,7 +275,6 @@ L9963E_StatusTypeDef _L9963E_DRV_reg_cmd(L9963E_DRV_HandleTypeDef *handle,
 #endif
 
     _L9963E_DRV_build_frame(raw, 1, is_write ? 1 : 0, device, address, is_write ? data->generic : 0);
-
     errorcode = _L9963E_DRV_spi_transmit(handle, raw, 5, 10);
 
     if (errorcode != L9963E_OK) {

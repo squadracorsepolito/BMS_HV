@@ -1,6 +1,8 @@
 #include "data_reading_timebase.h"
 #include "L9963_utils.h"
 #include "ntc.h"
+#include "tim.h"
+
 TIMEBASE_HandleTypeDef data_reading_timebase_handle;
 extern volatile uint16_t vcells[N_SLAVES][N_CELLS_PER_SLAVE];
 extern volatile uint16_t vgpio[N_SLAVES][N_GPIOS_PER_SLAVE];
@@ -25,7 +27,7 @@ STMLIBS_StatusTypeDef data_reading_l9963e_cb(){
     static uint8_t overtemperature_count[N_SLAVES][N_GPIOS_PER_SLAVE] = {0};
 
     L9963E_utils_read_all_cells(is_ntc_measure_required);
-
+    
     L9963E_utils_get_total_batt_mv(&vbattery_monitor, &vbattery_sum);
 
     if (is_ntc_measure_required){
@@ -65,3 +67,6 @@ STMLIBS_StatusTypeDef data_reading_l9963e_cb(){
 void data_reading_timebase_routine(void) {
     TIMEBASE_routine(&data_reading_timebase_handle);
 }
+void data_reading_timebase_timerElapsed_irq(TIM_HandleTypeDef *htim) {
+    TIMEBASE_TimerElapsedCallback(&data_reading_timebase_handle, htim);
+  }

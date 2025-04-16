@@ -72,6 +72,8 @@ uint8_t volatile error_code = 30;
 uint8_t charge_cmd, drive_cmd, balancing_cmd;
 FSM_BMS_HV_StateTypeDef current_state;
 L9963_Utils_StatusTypeDef utils_status = L9963E_UTILS_ERROR;
+extern L9963E_HandleTypeDef hl9963e;
+uint16_t data[5] = {0};
 /* USER CODE END 0 */
 
 /**
@@ -91,38 +93,7 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-    // do {
-    //   utils_status = L9963E_utils_init(); 
-    //   Err_LED_On();
-    //   HAL_Delay(500);
-    // } while (utils_status != L9963_UTILS_OK);
-
-    // Err_LED_Off();
-      
-    //fsm
-    uint8_t n_events = 0;
-
-    if (FSM_BMS_HV_init(&hfsm, n_events, run_callback_1, transition_callback_1) != STMLIBS_OK) {
-        error_code = 2;
-    }
-    current_state = FSM_get_state(&hfsm);
-    if (FSM_start(&hfsm) != STMLIBS_OK) {
-        error_code = 2;
-    }
-    current_state = FSM_get_state(&hfsm);
-    // if (FSM_get_state(&hfsm) == FSM_BMS_HV_active_idle){
-    //   // If first state is active idle then we good
-    //   Warn_LED_On();
-    //   HAL_Delay(1000);
-    //   Warn_LED_Off();
-    // } else {
-    //   Err_LED_On();
-    // }
-
-    data_reading_timebase_init();
-    ntc_init();
-    
-    
+        
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -143,16 +114,37 @@ int main(void)
   MX_USART3_UART_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
-  utils_status = L9963E_utils_init();
-  if (utils_status != L9963_UTILS_OK) {
-    Err_LED_On();
-  } else {
-    Warn_LED_On();
-  }
 
-  // Err_LED_Off();
-  //   Stat1_LED_On(); // Turn on the LED
-  //   Warn_LED_On();
+  while (L9963E_utils_init() != L9963_UTILS_OK) {
+    // Wait for the L9963E utils to be initialized
+    L9963E_sw_rst(&hl9963e, L9963E_DEVICE_BROADCAST, 1);
+    Err_LED_On();
+    HAL_Delay(1000);
+    Err_LED_Off();
+  }
+  // utils_status = L9963E_utils_init();
+
+  // if (utils_status != L9963_UTILS_OK) {
+  //   Err_LED_On();
+  // } else {
+  Warn_LED_On();
+  // }
+  //fsm
+  uint8_t n_events = 0;
+
+  if (FSM_BMS_HV_init(&hfsm, n_events, run_callback_1, transition_callback_1) != STMLIBS_OK) {
+      error_code = 2;
+  }
+  current_state = FSM_get_state(&hfsm);
+  if (FSM_start(&hfsm) != STMLIBS_OK) {
+      error_code = 2;
+  }
+  current_state = FSM_get_state(&hfsm);
+
+
+  data_reading_timebase_init();
+  ntc_init();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -169,7 +161,8 @@ int main(void)
       // uint8_t dummy_byte = 0x11;
       // HAL_SPI_Transmit(&hspi3, (uint8_t *)&dummy_byte, 1, 100);
       // HAL_Delay(1000);
-      // data_reading_timebase_routine();
+      //L9963E_utils_read_all_cells(RESET);
+      //data_reading_timebase_routine();
       // FSM_routine(&hfsm);
       // current_state = FSM_get_state(&hfsm);
     /* USER CODE END WHILE */
@@ -191,16 +184,28 @@ void SystemClock_Config(void)
   /** Configure the main internal regulator output voltage
   */
   __HAL_RCC_PWR_CLK_ENABLE();
-  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE3);
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 4;
+  RCC_OscInitStruct.PLL.PLLN = 180;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+  RCC_OscInitStruct.PLL.PLLQ = 2;
+  RCC_OscInitStruct.PLL.PLLR = 2;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Activate the Over-Drive mode
+  */
+  if (HAL_PWREx_EnableOverDrive() != HAL_OK)
   {
     Error_Handler();
   }
@@ -209,12 +214,12 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLRCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
   {
     Error_Handler();
   }
