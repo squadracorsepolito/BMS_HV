@@ -114,21 +114,15 @@ int main(void)
   MX_USART3_UART_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
+  // HAL_GPIO_WritePin(L9963TL_BNE_GPIO_IN_GPIO_Port, L9963TL_BNE_GPIO_IN_Pin, GPIO_PIN_SET);
+  // HAL_GPIO_WritePin(L9963TH_BNE_GPIO_IN_GPIO_Port, L9963TH_BNE_GPIO_IN_Pin, GPIO_PIN_SET);
+  utils_status = L9963E_utils_init();
 
-  while (L9963E_utils_init() != L9963_UTILS_OK) {
-    // Wait for the L9963E utils to be initialized
-    L9963E_sw_rst(&hl9963e, L9963E_DEVICE_BROADCAST, 1);
+  if (utils_status != L9963_UTILS_OK) {
     Err_LED_On();
-    HAL_Delay(1000);
-    Err_LED_Off();
+  } else {
+    Warn_LED_On();
   }
-  // utils_status = L9963E_utils_init();
-
-  // if (utils_status != L9963_UTILS_OK) {
-  //   Err_LED_On();
-  // } else {
-  Warn_LED_On();
-  // }
   //fsm
   uint8_t n_events = 0;
 

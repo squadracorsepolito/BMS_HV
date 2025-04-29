@@ -8,7 +8,7 @@
 
 #define T_WAKE_UP         ((uint32_t)2)
 // CHANGE LATER
-#define N_SLAVES          ((uint8_t)1)
+#define N_SLAVES          ((uint8_t)2)
 #define N_CELLS_PER_SLAVE ((uint8_t)11)
 #define N_GPIOS_PER_SLAVE ((uint8_t)6)
 #define ENABLED_CELLS                                                                                         \

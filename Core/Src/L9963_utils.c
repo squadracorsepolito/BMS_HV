@@ -25,13 +25,42 @@ const L9963E_IfTypeDef interface_L = {.L9963E_IF_DelayMs       = DelayMs,
                                       .L9963E_IF_SPI_Transmit  = L9963TL_SPI_Transmit};
 
 L9963_Utils_StatusTypeDef L9963E_utils_init(void) {
-    if (L9963E_init(&hl9963e, interface_H, 1) != L9963E_OK) {
+    if (L9963E_init(&hl9963e, interface_L, N_SLAVES) != L9963E_OK) {
         return L9963E_UTILS_ERROR;
     }
 
-    if (L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1) != L9963E_OK ){
-        return L9963E_UTILS_ERROR;
+    uint8_t x=0;
+
+    // if (L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1) != L9963E_OK) {
+    //     return L9963E_UTILS_ERROR;
+    // }
+
+	while (L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1) != L9963E_OK) {
+        L9963E_RegisterUnionTypeDef reg;
+		// this is often needed if chain is modified
+		reg.generic = 0;
+		reg.FSM.GO2SLP= 0b10;
+		reg.FSM.SW_RST= 0b10;
+		L9963E_DRV_reg_write(&hl9963e.drv_handle, L9963E_DEVICE_BROADCAST, L9963E_FSM_ADDR, &reg, 10);
+		HAL_Delay(5);
+
+		x++;
+		if (x>10){
+            return L9963E_UTILS_ERROR;
+
+          }  // continue after a few attempts. It's likely there are boards missing, no waiting will fix that
     }
+
+    // Calibration data is normally read only after power up. Any fault there will NOT fix
+	// unless chip is removed from battery, or manually forcing rewrite (as below).
+    L9963E_RegisterUnionTypeDef reg;
+	reg.generic = 0;
+	reg.Bal_3.trimming_retrigger= 1;
+	L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_3_ADDR, &reg, 10);
+	HAL_Delay(15);
+
+	reg.generic = 0;
+	L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_3_ADDR, &reg, 10);
 
     /** Configuring the chips by writing to the registers, since each chip 
         has the same configuration, we are using Broadcast access 
@@ -114,9 +143,9 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
     volatile L9963E_StatusTypeDef e;
     uint8_t c_done;
 
-    do {
-        L9963E_poll_conversion(&hl9963e, module_id, &c_done);
-    } while (!c_done);
+    // do {
+    //     L9963E_poll_conversion(&hl9963e, module_id, &c_done);
+    // } while (!c_done);
 
     L9963E_start_conversion(&hl9963e, module_id, 0b000, read_gpio ? L9963E_GPIO_CONV : 0);
     

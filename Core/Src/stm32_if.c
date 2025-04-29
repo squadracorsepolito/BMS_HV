@@ -23,7 +23,8 @@ L9963E_IF_PinState L9963TH_GPIO_ReadPin(L9963E_IF_PINS pin) {
             state = HAL_GPIO_ReadPin(L9963TH_TXEN_GPIO_OUT_GPIO_Port, L9963TH_TXEN_GPIO_OUT_Pin);
             break;
         case L9963E_IF_BNE:
-            state = HAL_GPIO_ReadPin(L9963TH_BNE_GPIO_IN_GPIO_Port, L9963TH_BNE_GPIO_IN_Pin);
+            state = L9963TH_BNE();
+            //HAL_GPIO_ReadPin(L9963TH_BNE_GPIO_IN_GPIO_Port, L9963TH_BNE_GPIO_IN_Pin);
             break;
         case L9963E_IF_ISOFREQ:
             state = HAL_GPIO_ReadPin(L9963TH_ISOFREQ_GPIO_OUT_GPIO_Port, L9963TH_ISOFREQ_GPIO_OUT_Pin);
