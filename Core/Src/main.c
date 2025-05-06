@@ -114,8 +114,6 @@ int main(void)
   MX_USART3_UART_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
-  // HAL_GPIO_WritePin(L9963TL_BNE_GPIO_IN_GPIO_Port, L9963TL_BNE_GPIO_IN_Pin, GPIO_PIN_SET);
-  // HAL_GPIO_WritePin(L9963TH_BNE_GPIO_IN_GPIO_Port, L9963TH_BNE_GPIO_IN_Pin, GPIO_PIN_SET);
   utils_status = L9963E_utils_init();
 
   if (utils_status != L9963_UTILS_OK) {

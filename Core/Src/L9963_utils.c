@@ -24,8 +24,14 @@ const L9963E_IfTypeDef interface_L = {.L9963E_IF_DelayMs       = DelayMs,
                                       .L9963E_IF_SPI_Receive   = L9963TL_SPI_Receive,
                                       .L9963E_IF_SPI_Transmit  = L9963TL_SPI_Transmit};
 
+// Read balancing prototype since removed from driver lib
+L9963E_StatusTypeDef L9963E_read_balancing_state(L9963E_HandleTypeDef *handle,
+    uint8_t device,
+    uint8_t *eof_bal_bit,
+    uint8_t *bal_on_bit);
+
 L9963_Utils_StatusTypeDef L9963E_utils_init(void) {
-    if (L9963E_init(&hl9963e, interface_L, N_SLAVES) != L9963E_OK) {
+    if (L9963E_init(&hl9963e, interface_H, N_SLAVES) != L9963E_OK) {
         return L9963E_UTILS_ERROR;
     }
 
@@ -36,12 +42,8 @@ L9963_Utils_StatusTypeDef L9963E_utils_init(void) {
     // }
 
 	while (L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1) != L9963E_OK) {
-        L9963E_RegisterUnionTypeDef reg;
 		// this is often needed if chain is modified
-		reg.generic = 0;
-		reg.FSM.GO2SLP= 0b10;
-		reg.FSM.SW_RST= 0b10;
-		L9963E_DRV_reg_write(&hl9963e.drv_handle, L9963E_DEVICE_BROADCAST, L9963E_FSM_ADDR, &reg, 10);
+        L9963E_sw_rst(&hl9963e, L9963E_DEVICE_BROADCAST, 1);
 		HAL_Delay(5);
 
 		x++;
@@ -53,14 +55,7 @@ L9963_Utils_StatusTypeDef L9963E_utils_init(void) {
 
     // Calibration data is normally read only after power up. Any fault there will NOT fix
 	// unless chip is removed from battery, or manually forcing rewrite (as below).
-    L9963E_RegisterUnionTypeDef reg;
-	reg.generic = 0;
-	reg.Bal_3.trimming_retrigger= 1;
-	L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_3_ADDR, &reg, 10);
-	HAL_Delay(15);
-
-	reg.generic = 0;
-	L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_3_ADDR, &reg, 10);
+    L9963E_trimming_retrigger(&hl9963e, L9963E_DEVICE_BROADCAST, 0);
 
     /** Configuring the chips by writing to the registers, since each chip 
         has the same configuration, we are using Broadcast access 
@@ -257,8 +252,8 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
 }
 
 void L9963E_utils_read_all_cells(uint8_t read_gpio){
-    for (uint8_t i = 1; i <= N_SLAVES; i++) {
-        L9963E_utils_read_cells(i, read_gpio);
+    for (uint8_t device = 1; device <= N_SLAVES; device++) {
+        L9963E_utils_read_cells(device, read_gpio);
     }
 }
 
@@ -306,8 +301,6 @@ L9963_Utils_StatusTypeDef L9963E_utils_balance_cells(void) {
     L9963E_StatusTypeDef e;
     uint8_t eof_bal                  = 0;
     uint8_t bal_on                   = 0;
-    // L9963E_BurstCmdTypeDef burst_cmd = _0x78BurstCmd;
-    // L9963E_BurstUnionTypeDef burst_data[N_SLAVES];
     L9963E_RegisterUnionTypeDef bal1_conf_reg = {.generic = L9963E_BAL_1_DEFAULT};
 
     bal1_conf_reg.Bal_1.bal_start = 1;
@@ -321,18 +314,6 @@ L9963_Utils_StatusTypeDef L9963E_utils_balance_cells(void) {
             e = L9963E_read_balancing_state(&hl9963e, device_id, &eof_bal, &bal_on);
         } while (e != L9963E_OK || ((eof_bal != 1) || (bal_on != 0)));
     }
-    // while ((eof_bal != N_SLAVES) && (bal_on != 0)) {
-    //     if (L9963E_DRV_burst_cmd(
-    //             &hl9963e.drv_handle, L9963E_DEVICE_BROADCAST, burst_cmd, burst_data, L9963E_BURST_0x78_LEN, 10) !=
-    //         L9963E_OK)
-    //         return L9963E_UTILS_ERROR;
-    //     eof_bal = 0;
-    //     bal_on  = 0;
-    //     for (uint8_t i = 0; i < N_SLAVES; i++) {
-    //         eof_bal += burst_data[i]._0x78.Frame17.eof_bal;
-    //         bal_on += burst_data[i]._0x78.Frame17.bal_on;
-    //     }
-    // }
 
     // Reset the balancing enable registers
     bal1_conf_reg.Bal_1.bal_start = 0;
@@ -340,3 +321,32 @@ L9963_Utils_StatusTypeDef L9963E_utils_balance_cells(void) {
     L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_1_ADDR, &bal1_conf_reg, 10);
     return L9963_UTILS_OK;
 }
+
+// Private function definitions
+L9963E_StatusTypeDef L9963E_read_balancing_state(L9963E_HandleTypeDef *handle,
+    uint8_t device,
+    uint8_t *eof_bal_bit,
+    uint8_t *bal_on_bit) {
+    L9963E_StatusTypeDef errorcode             = L9963E_OK;
+    L9963E_RegisterUnionTypeDef balCell6_1act_reg = {0};
+
+    #if L9963E_DEBUG
+        if (handle == NULL) {
+        return L9963E_ERROR;
+        }
+    #endif
+
+    if (device == L9963E_DEVICE_BROADCAST) {
+        return L9963E_ERROR;
+    }
+
+    errorcode = L9963E_DRV_reg_read(&(handle->drv_handle), device, L9963E_BalCell6_1act_ADDR, &balCell6_1act_reg, 10);
+
+    if (errorcode != L9963E_OK)
+        return errorcode;
+
+    *eof_bal_bit = balCell6_1act_reg.BalCell6_1act.eof_bal;
+    *bal_on_bit = balCell6_1act_reg.BalCell6_1act.bal_on;
+
+    return L9963E_OK;
+    }

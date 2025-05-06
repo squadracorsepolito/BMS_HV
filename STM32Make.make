@@ -114,8 +114,8 @@ Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim.c \
 Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim_ex.c \
 Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.c \
 Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_ll_adc.c \
-Lib/L9963E/src/L9963E.c \
-Lib/L9963E/src/L9963E_drv.c \
+Lib/L9963E_lib/src/L9963E.c \
+Lib/L9963E_lib/src/L9963E_drv.c \
 Lib/stmlibs/fsm/fsm.c \
 Lib/stmlibs/timebase/timebase.c \
 Lib/stmlibs/timer_utils/timer_utils.c
@@ -216,15 +216,19 @@ C_INCLUDES =  \
 -IDrivers/CMSIS/Include \
 -IDrivers/STM32F4xx_HAL_Driver/Inc \
 -IDrivers/STM32F4xx_HAL_Driver/Inc/Legacy \
--ILib/L9963E/inc \
+-ILib/L9963E_lib/inc \
+-ILib/L9963E_lib/interface_example \
 -ILib/stmlibs \
 -ILib/stmlibs/circular_buffer \
 -ILib/stmlibs/critical_section \
 -ILib/stmlibs/digital_filters/iir_filter \
 -ILib/stmlibs/digital_filters/median_filter \
+-ILib/stmlibs/error_utils \
 -ILib/stmlibs/fsm \
 -ILib/stmlibs/lock \
 -ILib/stmlibs/logger \
+-ILib/stmlibs/longcounter \
+-ILib/stmlibs/pwm \
 -ILib/stmlibs/timebase \
 -ILib/stmlibs/timer_utils
 
