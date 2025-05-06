@@ -86,7 +86,7 @@ L9963_Utils_StatusTypeDef L9963E_utils_init(void) {
         &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_VBATT_SUM_TH_ADDR, &vbat_sum_th_reg, 10);
 
     // Enabling the Reference Voltage for ADC
-    L9963E_enable_vref(&hl9963e, L9963E_DEVICE_BROADCAST, 1);
+    L9963E_enable_vref(&hl9963e, L9963E_DEVICE_BROADCAST, 0);
 
     // Set communication timeout and enable cells
     L9963E_setCommTimeout(&hl9963e, _256MS, L9963E_DEVICE_BROADCAST, 0);
@@ -143,9 +143,9 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
     volatile L9963E_StatusTypeDef e;
     uint8_t c_done;
 
-    // do {
-    //     L9963E_poll_conversion(&hl9963e, module_id, &c_done);
-    // } while (!c_done);
+    do {
+        L9963E_poll_conversion(&hl9963e, module_id, &c_done);
+    } while (!c_done);
 
     L9963E_start_conversion(&hl9963e, module_id, 0b000, read_gpio ? L9963E_GPIO_CONV : 0);
     
