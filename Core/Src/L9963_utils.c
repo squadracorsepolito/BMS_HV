@@ -10,19 +10,28 @@ volatile uint16_t vtot[N_SLAVES];
 volatile uint32_t vsumbatt[N_SLAVES];
 L9963E_HandleTypeDef hl9963e;
 
-const L9963E_IfTypeDef interface_H = {.L9963E_IF_DelayMs       = DelayMs,
-                                      .L9963E_IF_GetTickMs     = GetTickMs,
-                                      .L9963E_IF_GPIO_ReadPin  = L9963TH_GPIO_ReadPin,
-                                      .L9963E_IF_GPIO_WritePin = L9963TH_GPIO_WritePin,
-                                      .L9963E_IF_SPI_Receive   = L9963TH_SPI_Receive,
-                                      .L9963E_IF_SPI_Transmit  = L9963TH_SPI_Transmit};
+const L9963E_IfTypeDef interface = {
+    .L9963E_IF_DelayMs = DelayMs,
+    .L9963E_IF_GetTickMs = GetTickMs,
+    .L9963E_IF_GPIO_ReadPin = GPIO_ReadPin,
+    .L9963E_IF_GPIO_WritePin = GPIO_WritePin,
+    .L9963E_IF_SPI_Receive = SPI_Receive,
+    .L9963E_IF_SPI_Transmit = SPI_Transmit
+};
 
-const L9963E_IfTypeDef interface_L = {.L9963E_IF_DelayMs       = DelayMs,
-                                      .L9963E_IF_GetTickMs     = GetTickMs,
-                                      .L9963E_IF_GPIO_ReadPin  = L9963TL_GPIO_ReadPin,
-                                      .L9963E_IF_GPIO_WritePin = L9963TL_GPIO_WritePin,
-                                      .L9963E_IF_SPI_Receive   = L9963TL_SPI_Receive,
-                                      .L9963E_IF_SPI_Transmit  = L9963TL_SPI_Transmit};
+// const L9963E_IfTypeDef interface_H = {.L9963E_IF_DelayMs       = DelayMs,
+//                                       .L9963E_IF_GetTickMs     = GetTickMs,
+//                                       .L9963E_IF_GPIO_ReadPin  = L9963TH_GPIO_ReadPin,
+//                                       .L9963E_IF_GPIO_WritePin = L9963TH_GPIO_WritePin,
+//                                       .L9963E_IF_SPI_Receive   = L9963TH_SPI_Receive,
+//                                       .L9963E_IF_SPI_Transmit  = L9963TH_SPI_Transmit};
+
+// const L9963E_IfTypeDef interface_L = {.L9963E_IF_DelayMs       = DelayMs,
+//                                       .L9963E_IF_GetTickMs     = GetTickMs,
+//                                       .L9963E_IF_GPIO_ReadPin  = L9963TL_GPIO_ReadPin,
+//                                       .L9963E_IF_GPIO_WritePin = L9963TL_GPIO_WritePin,
+//                                       .L9963E_IF_SPI_Receive   = L9963TL_SPI_Receive,
+//                                       .L9963E_IF_SPI_Transmit  = L9963TL_SPI_Transmit};
 
 // Read balancing prototype since removed from driver lib
 L9963E_StatusTypeDef L9963E_read_balancing_state(L9963E_HandleTypeDef *handle,
@@ -30,109 +39,135 @@ L9963E_StatusTypeDef L9963E_read_balancing_state(L9963E_HandleTypeDef *handle,
     uint8_t *eof_bal_bit,
     uint8_t *bal_on_bit);
 
-L9963_Utils_StatusTypeDef L9963E_utils_init(void) {
-    if (L9963E_init(&hl9963e, interface_H, N_SLAVES) != L9963E_OK) {
-        return L9963E_UTILS_ERROR;
-    }
 
-    uint8_t x=0;
 
-    // if (L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1) != L9963E_OK) {
-    //     return L9963E_UTILS_ERROR;
-    // }
-
-	while (L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1) != L9963E_OK) {
-		// this is often needed if chain is modified
-        L9963E_sw_rst(&hl9963e, L9963E_DEVICE_BROADCAST, 1);
-		HAL_Delay(5);
-
-		x++;
-		if (x>10){
-            return L9963E_UTILS_ERROR;
-
-          }  // continue after a few attempts. It's likely there are boards missing, no waiting will fix that
-    }
-
-    // Calibration data is normally read only after power up. Any fault there will NOT fix
-	// unless chip is removed from battery, or manually forcing rewrite (as below).
-    L9963E_trimming_retrigger(&hl9963e, L9963E_DEVICE_BROADCAST, 0);
-
-    /** Configuring the chips by writing to the registers, since each chip 
-        has the same configuration, we are using Broadcast access 
-        to write to all chips at once **/
-
-    // Configuring GPIOs
+void L9963E_utils_init(void) {
+    L9963E_init(&hl9963e, interface, 1);
+    L9963E_StatusTypeDef error_addr =  L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1);
+    
     L9963E_RegisterUnionTypeDef gpio9_3_conf_reg = {.generic = L9963E_GPIO9_3_CONF_DEFAULT};
-    gpio9_3_conf_reg.GPIO9_3_CONF.GPIO7_CONFIG   = 0;
-    gpio9_3_conf_reg.GPIO9_3_CONF.GPIO8_CONFIG   = 0;
-    L9963E_DRV_reg_write(
-        &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_GPIO9_3_CONF_ADDR, &gpio9_3_conf_reg, 10);
-
-    // Configuring cells overvoltage/undervoltage thresholds
-    L9963E_RegisterUnionTypeDef vcell_thresh_uv_ov_reg      = {.generic = L9963E_VCELL_THRESH_UV_OV_DEFAULT};
+    gpio9_3_conf_reg.GPIO9_3_CONF.GPIO7_CONFIG = 0;
+    gpio9_3_conf_reg.GPIO9_3_CONF.GPIO8_CONFIG = 0;
+    L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_GPIO9_3_CONF_ADDR, &gpio9_3_conf_reg, 10);
+    
+    L9963E_RegisterUnionTypeDef vcell_thresh_uv_ov_reg = {.generic = L9963E_VCELL_THRESH_UV_OV_DEFAULT};
     vcell_thresh_uv_ov_reg.VCELL_THRESH_UV_OV.threshVcellOV = 0xff;
-    L9963E_DRV_reg_write(
-        &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_VCELL_THRESH_UV_OV_ADDR, &vcell_thresh_uv_ov_reg, 10);
-
-    // Configuring total voltage tresholds
-    L9963E_RegisterUnionTypeDef vbat_sum_th_reg  = {.generic = L9963E_VBATT_SUM_TH_DEFAULT};
+    L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_VCELL_THRESH_UV_OV_ADDR, &vcell_thresh_uv_ov_reg, 10);
+    
+    L9963E_RegisterUnionTypeDef vbat_sum_th_reg = {.generic = L9963E_VBATT_SUM_TH_DEFAULT};
     vbat_sum_th_reg.VBATT_SUM_TH.VBATT_SUM_OV_TH = 0xff;
-    L9963E_DRV_reg_write(
-        &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_VBATT_SUM_TH_ADDR, &vbat_sum_th_reg, 10);
-
-    // Enabling the Reference Voltage for ADC
+    L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_VBATT_SUM_TH_ADDR, &vbat_sum_th_reg, 10);
+    
     L9963E_enable_vref(&hl9963e, L9963E_DEVICE_BROADCAST, 0);
-
-    // Set communication timeout and enable cells
+    
     L9963E_setCommTimeout(&hl9963e, _256MS, L9963E_DEVICE_BROADCAST, 0);
-    L9963E_set_enabled_cells(&hl9963e, L9963E_DEVICE_BROADCAST, ENABLED_CELLS);
+    L9963E_set_enabled_cells(&hl9963e, 0x1, ENABLED_CELLS);
+    } 
+// L9963_Utils_StatusTypeDef L9963E_utils_init(void) {
+//     L9963E_init(&hl9963e, interface_H, N_SLAVES);
 
-    /* Configuring balancing operations: Timed Balancing | 20s treshold*/
-    L9963E_RegisterUnionTypeDef bal2_conf_reg = {.generic = L9963E_BAL_2_DEFAULT};
-    bal2_conf_reg.Bal_2.Balmode               = 0b10;
-    bal2_conf_reg.Bal_2.TimedBalacc           = 1;  // Fine resolution
-    bal2_conf_reg.Bal_2.ThrTimedBalCell13     = 5;  // 20s treshold
-    bal2_conf_reg.Bal_2.ThrTimedBalCell14     = 5;  // 20s treshold
-    L9963E_RegisterUnionTypeDef bal3_conf_reg = {.generic = L9963E_BAL_3_DEFAULT};
-    bal3_conf_reg.Bal_3.ThrTimedBalCell12     = 5;
-    L9963E_RegisterUnionTypeDef bal5_conf_reg = {.generic = L9963E_BAL_5_DEFAULT};
-    bal5_conf_reg.Bal_5.ThrTimedBalCell8      = 5;
-    bal5_conf_reg.Bal_5.ThrTimedBalCell7      = 5;
-    L9963E_RegisterUnionTypeDef bal6_conf_reg = {.generic = L9963E_BAL_6_DEFAULT};
-    bal6_conf_reg.Bal_6.ThrTimedBalCell6      = 5;
-    bal6_conf_reg.Bal_6.ThrTimedBalCell5      = 5;
-    L9963E_RegisterUnionTypeDef bal7_conf_reg = {.generic = L9963E_BAL_7_DEFAULT};
-    bal7_conf_reg.Bal_7.ThrTimedBalCell4      = 5;
-    bal7_conf_reg.Bal_7.ThrTimedBalCell3      = 5;
-    L9963E_RegisterUnionTypeDef bal8_conf_reg = {.generic = L9963E_BAL_8_DEFAULT};
-    bal8_conf_reg.Bal_8.ThrTimedBalCell2      = 5;
-    bal8_conf_reg.Bal_8.ThrTimedBalCell1      = 5;
-    L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_3_ADDR, &bal3_conf_reg, 10);
-    L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_5_ADDR, &bal5_conf_reg, 10);
-    L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_2_ADDR, &bal2_conf_reg, 10);
-    L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_6_ADDR, &bal6_conf_reg, 10);
-    L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_7_ADDR, &bal7_conf_reg, 10);
-    L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_8_ADDR, &bal8_conf_reg, 10);
-    // Enabling balancing on selected cells
-    L9963E_RegisterUnionTypeDef bal_cell14_7act = {.generic = L9963E_BALCELL14_7ACT_DEFAULT};
-    bal_cell14_7act.BalCell14_7act.BAL14        = 0b10;
-    bal_cell14_7act.BalCell14_7act.BAL13        = 0b10;
-    bal_cell14_7act.BalCell14_7act.BAL12        = 0b10;
-    bal_cell14_7act.BalCell14_7act.BAL8         = 0b10;
-    bal_cell14_7act.BalCell14_7act.BAL7         = 0b10;
-    L9963E_RegisterUnionTypeDef bal_cell6_1act  = {.generic = L9963E_BALCELL6_1ACT_DEFAULT};
-    bal_cell6_1act.BalCell6_1act.BAL6           = 0b10;
-    bal_cell6_1act.BalCell6_1act.BAL5           = 0b10;
-    bal_cell6_1act.BalCell6_1act.BAL4           = 0b10;
-    bal_cell6_1act.BalCell6_1act.BAL3           = 0b10;
-    bal_cell6_1act.BalCell6_1act.BAL2           = 0b10;
-    bal_cell6_1act.BalCell6_1act.BAL1           = 0b10;
-    L9963E_DRV_reg_write(
-        &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_BalCell6_1act_ADDR, &bal_cell6_1act, 10);
-    L9963E_DRV_reg_write(
-        &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_BalCell14_7act_ADDR, &bal_cell14_7act, 10);
-    return L9963_UTILS_OK;
-}
+//     // if (L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1) != L9963E_OK) {
+//     //     return L9963E_UTILS_ERROR;
+//     // }
+//     volatile L9963E_StatusTypeDef addr_status = L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1);
+
+//     if (addr_status != L9963E_OK) {
+//         return L9963E_UTILS_ERROR;
+//     }
+
+//     //uint8_t x=0;
+// 	// while (L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1) != L9963E_OK) {
+// 	// 	// this is often needed if chain is modified
+//     //     L9963E_sw_rst(&hl9963e, L9963E_DEVICE_BROADCAST, 1);
+// 	// 	HAL_Delay(5);
+
+// 	// 	x++;
+// 	// 	if (x>10){
+//     //         return L9963E_UTILS_ERROR;
+
+//     //       }  // continue after a few attempts. It's likely there are boards missing, no waiting will fix that
+//     // }
+
+//     // Calibration data is normally read only after power up. Any fault there will NOT fix
+// 	// unless chip is removed from battery, or manually forcing rewrite (as below).
+//     L9963E_trimming_retrigger(&hl9963e, L9963E_DEVICE_BROADCAST, 0);
+
+//     /** Configuring the chips by writing to the registers, since each chip 
+//         has the same configuration, we are using Broadcast access 
+//         to write to all chips at once **/
+
+//     // Configuring GPIOs
+//     L9963E_RegisterUnionTypeDef gpio9_3_conf_reg = {.generic = L9963E_GPIO9_3_CONF_DEFAULT};
+//     gpio9_3_conf_reg.GPIO9_3_CONF.GPIO7_CONFIG   = 0;
+//     gpio9_3_conf_reg.GPIO9_3_CONF.GPIO8_CONFIG   = 0;
+//     L9963E_DRV_reg_write(
+//         &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_GPIO9_3_CONF_ADDR, &gpio9_3_conf_reg, 10);
+
+//     // Configuring cells overvoltage/undervoltage thresholds
+//     L9963E_RegisterUnionTypeDef vcell_thresh_uv_ov_reg      = {.generic = L9963E_VCELL_THRESH_UV_OV_DEFAULT};
+//     vcell_thresh_uv_ov_reg.VCELL_THRESH_UV_OV.threshVcellOV = 0xff;
+//     L9963E_DRV_reg_write(
+//         &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_VCELL_THRESH_UV_OV_ADDR, &vcell_thresh_uv_ov_reg, 10);
+
+//     // Configuring total voltage tresholds
+//     L9963E_RegisterUnionTypeDef vbat_sum_th_reg  = {.generic = L9963E_VBATT_SUM_TH_DEFAULT};
+//     vbat_sum_th_reg.VBATT_SUM_TH.VBATT_SUM_OV_TH = 0xff;
+//     L9963E_DRV_reg_write(
+//         &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_VBATT_SUM_TH_ADDR, &vbat_sum_th_reg, 10);
+
+//     // Enabling the Reference Voltage for ADC
+//     L9963E_enable_vref(&hl9963e, L9963E_DEVICE_BROADCAST, 0);
+
+//     // Set communication timeout and enable cells
+//     L9963E_setCommTimeout(&hl9963e, _256MS, L9963E_DEVICE_BROADCAST, 0);
+//     L9963E_set_enabled_cells(&hl9963e, L9963E_DEVICE_BROADCAST, ENABLED_CELLS);
+
+//     /* Configuring balancing operations: Timed Balancing | 20s treshold*/
+//     L9963E_RegisterUnionTypeDef bal2_conf_reg = {.generic = L9963E_BAL_2_DEFAULT};
+//     bal2_conf_reg.Bal_2.Balmode               = 0b10;
+//     bal2_conf_reg.Bal_2.TimedBalacc           = 1;  // Fine resolution
+//     bal2_conf_reg.Bal_2.ThrTimedBalCell13     = 5;  // 20s treshold
+//     bal2_conf_reg.Bal_2.ThrTimedBalCell14     = 5;  // 20s treshold
+//     L9963E_RegisterUnionTypeDef bal3_conf_reg = {.generic = L9963E_BAL_3_DEFAULT};
+//     bal3_conf_reg.Bal_3.ThrTimedBalCell12     = 5;
+//     L9963E_RegisterUnionTypeDef bal5_conf_reg = {.generic = L9963E_BAL_5_DEFAULT};
+//     bal5_conf_reg.Bal_5.ThrTimedBalCell8      = 5;
+//     bal5_conf_reg.Bal_5.ThrTimedBalCell7      = 5;
+//     L9963E_RegisterUnionTypeDef bal6_conf_reg = {.generic = L9963E_BAL_6_DEFAULT};
+//     bal6_conf_reg.Bal_6.ThrTimedBalCell6      = 5;
+//     bal6_conf_reg.Bal_6.ThrTimedBalCell5      = 5;
+//     L9963E_RegisterUnionTypeDef bal7_conf_reg = {.generic = L9963E_BAL_7_DEFAULT};
+//     bal7_conf_reg.Bal_7.ThrTimedBalCell4      = 5;
+//     bal7_conf_reg.Bal_7.ThrTimedBalCell3      = 5;
+//     L9963E_RegisterUnionTypeDef bal8_conf_reg = {.generic = L9963E_BAL_8_DEFAULT};
+//     bal8_conf_reg.Bal_8.ThrTimedBalCell2      = 5;
+//     bal8_conf_reg.Bal_8.ThrTimedBalCell1      = 5;
+//     L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_3_ADDR, &bal3_conf_reg, 10);
+//     L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_5_ADDR, &bal5_conf_reg, 10);
+//     L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_2_ADDR, &bal2_conf_reg, 10);
+//     L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_6_ADDR, &bal6_conf_reg, 10);
+//     L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_7_ADDR, &bal7_conf_reg, 10);
+//     L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_8_ADDR, &bal8_conf_reg, 10);
+//     // Enabling balancing on selected cells
+//     L9963E_RegisterUnionTypeDef bal_cell14_7act = {.generic = L9963E_BALCELL14_7ACT_DEFAULT};
+//     bal_cell14_7act.BalCell14_7act.BAL14        = 0b10;
+//     bal_cell14_7act.BalCell14_7act.BAL13        = 0b10;
+//     bal_cell14_7act.BalCell14_7act.BAL12        = 0b10;
+//     bal_cell14_7act.BalCell14_7act.BAL8         = 0b10;
+//     bal_cell14_7act.BalCell14_7act.BAL7         = 0b10;
+//     L9963E_RegisterUnionTypeDef bal_cell6_1act  = {.generic = L9963E_BALCELL6_1ACT_DEFAULT};
+//     bal_cell6_1act.BalCell6_1act.BAL6           = 0b10;
+//     bal_cell6_1act.BalCell6_1act.BAL5           = 0b10;
+//     bal_cell6_1act.BalCell6_1act.BAL4           = 0b10;
+//     bal_cell6_1act.BalCell6_1act.BAL3           = 0b10;
+//     bal_cell6_1act.BalCell6_1act.BAL2           = 0b10;
+//     bal_cell6_1act.BalCell6_1act.BAL1           = 0b10;
+//     L9963E_DRV_reg_write(
+//         &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_BalCell6_1act_ADDR, &bal_cell6_1act, 10);
+//     L9963E_DRV_reg_write(
+//         &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_BalCell14_7act_ADDR, &bal_cell14_7act, 10);
+//     return L9963_UTILS_OK;
+// }
 
 void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
     volatile L9963E_StatusTypeDef e;

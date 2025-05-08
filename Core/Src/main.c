@@ -114,13 +114,14 @@ int main(void)
   MX_USART3_UART_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
-  utils_status = L9963E_utils_init();
-
-  if (utils_status != L9963_UTILS_OK) {
-    Err_LED_On();
-  } else {
-    Warn_LED_On();
-  }
+  HAL_Delay(50);
+  //utils_status = L9963E_utils_init();
+  L9963E_utils_init();
+  // if (utils_status != L9963_UTILS_OK) {
+  //   Err_LED_On();
+  // } else {
+  //   Warn_LED_On();
+  // }
   //fsm
   uint8_t n_events = 0;
 
@@ -153,7 +154,7 @@ int main(void)
       // uint8_t dummy_byte = 0x11;
       // HAL_SPI_Transmit(&hspi3, (uint8_t *)&dummy_byte, 1, 100);
       // HAL_Delay(1000);
-      //L9963E_utils_read_all_cells(RESET);
+      L9963E_utils_read_all_cells(RESET);
       //data_reading_timebase_routine();
       // FSM_routine(&hfsm);
       // current_state = FSM_get_state(&hfsm);
