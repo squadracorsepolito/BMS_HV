@@ -10,7 +10,7 @@ volatile uint16_t vtot[N_SLAVES];
 volatile uint32_t vsumbatt[N_SLAVES];
 L9963E_HandleTypeDef hl9963e;
 
-const L9963E_IfTypeDef interface = {
+const L9963E_IfTypeDef interface_H = {
     .L9963E_IF_DelayMs = DelayMs,
     .L9963E_IF_GetTickMs = GetTickMs,
     .L9963E_IF_GPIO_ReadPin = GPIO_ReadPin,
@@ -42,11 +42,11 @@ L9963E_StatusTypeDef L9963E_read_balancing_state(L9963E_HandleTypeDef *handle,
 
 
 void L9963E_utils_init(void) {
-    L9963E_init(&hl9963e, interface, 1);
+    L9963E_init(&hl9963e, interface_H, 1);
     L9963E_StatusTypeDef error_addr =  L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1);
     
     L9963E_RegisterUnionTypeDef gpio9_3_conf_reg = {.generic = L9963E_GPIO9_3_CONF_DEFAULT};
-    gpio9_3_conf_reg.GPIO9_3_CONF.GPIO7_CONFIG = 0;
+    //gpio9_3_conf_reg.GPIO9_3_CONF.GPIO7_CONFIG = 0;
     gpio9_3_conf_reg.GPIO9_3_CONF.GPIO8_CONFIG = 0;
     L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_GPIO9_3_CONF_ADDR, &gpio9_3_conf_reg, 10);
     
@@ -62,14 +62,16 @@ void L9963E_utils_init(void) {
     
     L9963E_setCommTimeout(&hl9963e, _256MS, L9963E_DEVICE_BROADCAST, 0);
     L9963E_set_enabled_cells(&hl9963e, 0x1, ENABLED_CELLS);
-    } 
-// L9963_Utils_StatusTypeDef L9963E_utils_init(void) {
+}
+
+
+// L9963E_Utils_StatusTypeDef L9963E_utils_init(void) {
 //     L9963E_init(&hl9963e, interface_H, N_SLAVES);
 
 //     // if (L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1) != L9963E_OK) {
 //     //     return L9963E_UTILS_ERROR;
 //     // }
-//     volatile L9963E_StatusTypeDef addr_status = L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1);
+//     volatile L9963E_StatusTypeDef addr_status = L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1);//dual ring daisy chain set to 0 here, CHECK
 
 //     if (addr_status != L9963E_OK) {
 //         return L9963E_UTILS_ERROR;
@@ -268,10 +270,10 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
     } while (e != L9963E_OK || !d_rdy);
     vgpio[module_id][3] = voltage;
 
-    do {
-        e = L9963E_read_gpio_voltage(&hl9963e, module_id, L9963E_GPIO7, &voltage, &d_rdy);
-    } while (e != L9963E_OK || !d_rdy);
-    vgpio[module_id][4] = voltage;
+    // do {
+    //     e = L9963E_read_gpio_voltage(&hl9963e, module_id, L9963E_GPIO7, &voltage, &d_rdy);
+    // } while (e != L9963E_OK || !d_rdy);
+    // vgpio[module_id][4] = voltage;
 
     do {
         e = L9963E_read_gpio_voltage(&hl9963e, module_id, L9963E_GPIO8, &voltage, &d_rdy);
@@ -332,7 +334,7 @@ void L9963E_utils_get_total_batt_mv(float *v_battery_monitor, float *v_battery_s
 }
 
 // Timed balancing mode
-L9963_Utils_StatusTypeDef L9963E_utils_balance_cells(void) {
+L9963E_Utils_StatusTypeDef L9963E_utils_balance_cells(void) {
     L9963E_StatusTypeDef e;
     uint8_t eof_bal                  = 0;
     uint8_t bal_on                   = 0;

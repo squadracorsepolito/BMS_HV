@@ -71,9 +71,9 @@ FSM_HandleTypeDef hfsm;
 uint8_t volatile error_code = 30;
 uint8_t charge_cmd, drive_cmd, balancing_cmd;
 FSM_BMS_HV_StateTypeDef current_state;
-L9963_Utils_StatusTypeDef utils_status = L9963E_UTILS_ERROR;
+L9963E_Utils_StatusTypeDef utils_status = L9963E_UTILS_ERROR;
 extern L9963E_HandleTypeDef hl9963e;
-uint16_t data[5] = {0};
+uint16_t data[5] = {0}; //ok
 /* USER CODE END 0 */
 
 /**
@@ -114,15 +114,8 @@ int main(void)
   MX_USART3_UART_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
-  HAL_Delay(50);
-  //utils_status = L9963E_utils_init();
+  // HAL_Delay(50);
   L9963E_utils_init();
-  // if (utils_status != L9963_UTILS_OK) {
-  //   Err_LED_On();
-  // } else {
-  //   Warn_LED_On();
-  // }
-  //fsm
   uint8_t n_events = 0;
 
   if (FSM_BMS_HV_init(&hfsm, n_events, run_callback_1, transition_callback_1) != STMLIBS_OK) {
@@ -136,28 +129,28 @@ int main(void)
 
 
   data_reading_timebase_init();
-  ntc_init();
+  ntc_init(); //ok
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
     while (1) {
-      // if (FSM_get_state(&hfsm) == FSM_BMS_HV_active_idle){
-      //   // If first state is active idle then we good
-      //   Warn_LED_On();
-      //   HAL_Delay(1000);
-      //   Warn_LED_Off();
-      // } else {
-      //   Err_LED_On();
-      // }
-      // uint8_t dummy_byte = 0x11;
-      // HAL_SPI_Transmit(&hspi3, (uint8_t *)&dummy_byte, 1, 100);
-      // HAL_Delay(1000);
+      if (FSM_get_state(&hfsm) == FSM_BMS_HV_active_idle){
+         // If first state is active idle then we good
+        Warn_LED_On();
+        HAL_Delay(1000);
+        Warn_LED_Off();
+      } else {
+         Err_LED_On();
+      }
+      uint8_t dummy_byte = 0x11;
+      HAL_SPI_Transmit(&hspi3, (uint8_t *)&dummy_byte, 1, 100);
+      HAL_Delay(1000);
       L9963E_utils_read_all_cells(RESET);
-      //data_reading_timebase_routine();
-      // FSM_routine(&hfsm);
-      // current_state = FSM_get_state(&hfsm);
+      data_reading_timebase_routine();
+      FSM_routine(&hfsm);
+      current_state = FSM_get_state(&hfsm);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -235,8 +228,7 @@ void Error_Handler(void)
     }
   /* USER CODE END Error_Handler_Debug */
 }
-
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.

@@ -21,16 +21,16 @@
 typedef enum {
     L9963_UTILS_OK = 0,
     L9963E_UTILS_ERROR,
-} L9963_Utils_StatusTypeDef;
+} L9963E_Utils_StatusTypeDef;
 
+//L9963E_Utils_StatusTypeDef L9963E_utils_init(void);
 void L9963E_utils_init(void);
-
 //L9963_Utils_StatusTypeDef L9963E_utils_init(void);
 void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio);
 void L9963E_utils_read_all_cells(uint8_t read_gpio);
 void L9963E_utils_get_module_mv(uint8_t module_id);
 float L9963E_utils_get_cell_mv(uint8_t module_id, uint8_t index);
 void L9963E_utils_get_batt_mv(float *v_tot, float *v_sum, uint8_t module);
-L9963_Utils_StatusTypeDef L9963E_utils_balance_cells(void);
+L9963E_Utils_StatusTypeDef L9963E_utils_balance_cells(void);
 void L9963E_utils_get_total_batt_mv(float *v_tot, float *v_sum);
 #endif  // L9963T_UTILS_H
