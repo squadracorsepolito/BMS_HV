@@ -41,8 +41,9 @@ void L9963E_utils_init(void) {
         &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_GPIO9_3_CONF_ADDR, &gpio9_3_conf_reg, 10);
 
     // Configuring cells overvoltage/undervoltage thresholds
-    L9963E_RegisterUnionTypeDef vcell_thresh_uv_ov_reg      = {.generic = L9963E_VCELL_THRESH_UV_OV_DEFAULT};
+    L9963E_RegisterUnionTypeDef vcell_thresh_uv_ov_reg = {.generic = L9963E_VCELL_THRESH_UV_OV_DEFAULT};
     vcell_thresh_uv_ov_reg.VCELL_THRESH_UV_OV.threshVcellOV = 0xff;
+    vcell_thresh_uv_ov_reg.VCELL_THRESH_UV_OV.threshVcellUV = 0x50;
     L9963E_DRV_reg_write(
         &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_VCELL_THRESH_UV_OV_ADDR, &vcell_thresh_uv_ov_reg, 10);
 
