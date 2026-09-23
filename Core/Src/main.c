@@ -87,30 +87,6 @@ int main(void)
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
-
-  /* USER CODE BEGIN Init */
-    L9963E_utils_init();
-    //fsm
-    uint8_t n_events = 0;
-
-    if (FSM_BMS_HV_init(&hfsm, n_events, run_callback_1, transition_callback_1) != STMLIBS_OK) {
-        error_code = 2;
-    }
-    if (FSM_start(&hfsm) != STMLIBS_OK) {
-        error_code = 2;
-    }
-    if (FSM_get_state(&hfsm) == FSM_BMS_HV_active_idle){
-      // If first state is active idle then we good
-      Warn_LED_On();
-      HAL_Delay(1000);
-      Warn_LED_Off();
-    } else {
-      Err_LED_On();
-    }
-
-    data_reading_timebase_init();
-    ntc_init();
-    
     
   /* USER CODE END Init */
 
@@ -135,6 +111,32 @@ int main(void)
     Stat1_LED_On(); // Turn on the LED
   /* USER CODE END 2 */
 
+  HAL_Delay(50);
+
+  /* USER CODE BEGIN Init */
+    L9963E_utils_init();
+
+    data_reading_timebase_init();
+    ntc_init();
+    
+    //fsm
+    uint8_t n_events = 0;
+
+    if (FSM_BMS_HV_init(&hfsm, n_events, run_callback_1, transition_callback_1) != STMLIBS_OK) {
+        error_code = 2;
+    }
+    if (FSM_start(&hfsm) != STMLIBS_OK) {
+        error_code = 2;
+    }
+    if (FSM_get_state(&hfsm) == FSM_BMS_HV_active_idle){
+      // If first state is active idle then we good
+      Warn_LED_On();
+      HAL_Delay(1000);
+      Warn_LED_Off();
+    } else {
+      Err_LED_On();
+    }
+
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
     while (1) {
@@ -158,17 +160,30 @@ void SystemClock_Config(void)
 
   /** Configure the main internal regulator output voltage
   */
-  __HAL_RCC_PWR_CLK_ENABLE();
-  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE3);
+  __HAL_RCC_PWR_CLK_ENABLE(); //clock controller alimentazione
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1); //massimo livello regolatore di tensione
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE; //HSE sta per High Speed External 
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON; //Accessione del HSE quindi del quarzo esterno
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON; //Phase-Locked Loop, ovvero il moltiplicatore di giri del IC
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE; //Colleghiamo il quarzo esterno all'ingresso del PLL
+  RCC_OscInitStruct.PLL.PLLM = 4;
+  RCC_OscInitStruct.PLL.PLLN = 180;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+  RCC_OscInitStruct.PLL.PLLQ = 2;
+  RCC_OscInitStruct.PLL.PLLR = 2;
+
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler(); //Se il quarzo non funziona va tutto in errore
+  }
+
+  /** Activate the Over-Drive mode
+  */
+  if (HAL_PWREx_EnableOverDrive() != HAL_OK) //attiviamo la modalità Over-Drive
   {
     Error_Handler();
   }
@@ -177,12 +192,12 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLRCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1; //Il bus AHB viaggia alla stessa velocità del Processore
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4; //Il bus APB1 viaggia ad 1/4 della velcoità, periferiche basse vecloità
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2; //Il bus APB2 viaggia a metà velcoità del processore
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK) //aumentiamo il tempo del flash dei dati
   {
     Error_Handler();
   }

@@ -27,7 +27,7 @@ const L9963E_IfTypeDef interface_L = {.L9963E_IF_DelayMs       = DelayMs,
 // TRYING TO FIGURE OUT HOW TO INITIALIZE THE DRIVER HANDLE
 void L9963E_utils_init(void) {
     L9963E_init(&hl9963e, interface_H, N_SLAVES);
-    L9963E_addressing_procedure(&hl9963e, 0b11, 1, 0b00, 1);
+    L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1);
 
     /** Configuring the chips by writing to the registers, since each chip 
         has the same configuration, we are using Broadcast access 
@@ -287,6 +287,8 @@ L9963_Utils_StatusTypeDef L9963E_utils_balance_cells(void) {
             e = L9963E_read_balancing_state(&hl9963e, device_id, &eof_bal, &bal_on);
         } while (e != L9963E_OK || ((eof_bal != 1) || (bal_on != 0)));
     }
+
+    //VERSIONE VELOCE PER CONTROLLARE IL TERMINE BILANCIAMENTO QUIDNI NON SINGOLARMENTE
     // while ((eof_bal != N_SLAVES) && (bal_on != 0)) {
     //     if (L9963E_DRV_burst_cmd(
     //             &hl9963e.drv_handle, L9963E_DEVICE_BROADCAST, burst_cmd, burst_data, L9963E_BURST_0x78_LEN, 10) !=
