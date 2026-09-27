@@ -330,8 +330,8 @@ L9963E_StatusTypeDef L9963E_DRV_trans_sleep(L9963E_DRV_HandleTypeDef *handle) {
         return L9963E_ERROR;
     }
 #endif
-
-    return L9963E_DRV_DIS_LOW(handle);
+    /* DIS=HIGH → L9963T enters low-power/standby mode (L9963T DS Table 1) */
+    return L9963E_DRV_DIS_HIGH(handle);
 }
 
 L9963E_StatusTypeDef L9963E_DRV_trans_wakeup(L9963E_DRV_HandleTypeDef *handle) {
@@ -340,8 +340,8 @@ L9963E_StatusTypeDef L9963E_DRV_trans_wakeup(L9963E_DRV_HandleTypeDef *handle) {
         return L9963E_ERROR;
     }
 #endif
-
-    return L9963E_DRV_DIS_HIGH(handle);
+    /* DIS=LOW → L9963T enters Normal mode / active (L9963T DS Table 1) */
+    return L9963E_DRV_DIS_LOW(handle);
 }
 
 L9963E_IF_PinState L9963E_DRV_trans_is_sleeping(L9963E_DRV_HandleTypeDef *handle) {

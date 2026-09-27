@@ -59,7 +59,7 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
             ++x;
             tick = L9963E_DRV_GETTICK(&(handle->drv_handle));
         } else {
-            if (L9963E_DRV_GETTICK(&(handle->drv_handle)) - tick >= 10) {
+            if (L9963E_DRV_GETTICK(&(handle->drv_handle)) - tick >= 100) {
                 return L9963E_TIMEOUT;
             }
 

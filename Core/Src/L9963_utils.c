@@ -67,6 +67,7 @@ void L9963E_utils_init(void) {
     bal2_conf_reg.Bal_2.ThrTimedBalCell14     = 5;  // 20s treshold
     L9963E_RegisterUnionTypeDef bal3_conf_reg = {.generic = L9963E_BAL_3_DEFAULT};
     bal3_conf_reg.Bal_3.ThrTimedBalCell12     = 5;
+    bal3_conf_reg.Bal_3.Lock_isoh_isofreq     = 1;  // Preserve lock set by addressing_procedure
     L9963E_RegisterUnionTypeDef bal5_conf_reg = {.generic = L9963E_BAL_5_DEFAULT};
     bal5_conf_reg.Bal_5.ThrTimedBalCell8      = 5;
     bal5_conf_reg.Bal_5.ThrTimedBalCell7      = 5;
