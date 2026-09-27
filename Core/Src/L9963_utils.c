@@ -27,7 +27,7 @@ const L9963E_IfTypeDef interface_L = {.L9963E_IF_DelayMs       = DelayMs,
 // TRYING TO FIGURE OUT HOW TO INITIALIZE THE DRIVER HANDLE
 void L9963E_utils_init(void) {
     L9963E_init(&hl9963e, interface_H, N_SLAVES);
-    L9963E_addressing_procedure(&hl9963e, 0b11, 1, 0b00, 1);
+    L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1);
 
     /** Configuring the chips by writing to the registers, since each chip 
         has the same configuration, we are using Broadcast access 
@@ -106,116 +106,162 @@ void L9963E_utils_init(void) {
 }
 
 void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
+    /* module_id: indice 0-based dell'array vcells/vgpio
+     * device_id: chip ID L9963E = module_id + 1 (parte da 1; 0 = broadcast)
+     */
+    uint8_t device_id = module_id + 1;
     L9963E_StatusTypeDef e;
-    uint8_t c_done;
+    uint8_t c_done = 0;
+    uint32_t t0;
 
+    /* Attende che l'eventuale conversione precedente sia terminata */
+    t0 = GetTickMs();
     do {
-        L9963E_poll_conversion(&hl9963e, module_id, &c_done);
+        L9963E_poll_conversion(&hl9963e, device_id, &c_done);
+        if (GetTickMs() - t0 > 500U) break;
     } while (!c_done);
 
-    L9963E_start_conversion(&hl9963e, module_id, 0b000, read_gpio ? L9963E_GPIO_CONV : 0);
-    
-    uint16_t voltage       = 0;
-    uint8_t d_rdy          = 0;
+    L9963E_start_conversion(&hl9963e, device_id, 0b000, read_gpio ? L9963E_GPIO_CONV : 0);
+
+    uint16_t voltage = 0;
+    uint8_t d_rdy    = 0;
 
     /******* READING CELL VOLTAGE OF EACH INDIVIDUAL CELL *******/
+    t0 = GetTickMs();
     do {
-        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL1, &voltage, &d_rdy);
+        e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL1, &voltage, &d_rdy);
+        if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
     vcells[module_id][0] = voltage;
 
+    t0 = GetTickMs();
     do {
-        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL2, &voltage, &d_rdy);
+        e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL2, &voltage, &d_rdy);
+        if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
     vcells[module_id][1] = voltage;
 
+    t0 = GetTickMs();
     do {
-        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL3, &voltage, &d_rdy);
+        e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL3, &voltage, &d_rdy);
+        if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
     vcells[module_id][2] = voltage;
 
+    t0 = GetTickMs();
     do {
-        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL4, &voltage, &d_rdy);
+        e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL4, &voltage, &d_rdy);
+        if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
     vcells[module_id][3] = voltage;
 
+    t0 = GetTickMs();
     do {
-        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL5, &voltage, &d_rdy);
+        e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL5, &voltage, &d_rdy);
+        if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
     vcells[module_id][4] = voltage;
 
+    t0 = GetTickMs();
     do {
-        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL6, &voltage, &d_rdy);
+        e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL6, &voltage, &d_rdy);
+        if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
     vcells[module_id][5] = voltage;
 
+    t0 = GetTickMs();
     do {
-        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL7, &voltage, &d_rdy);
+        e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL7, &voltage, &d_rdy);
+        if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
     vcells[module_id][6] = voltage;
 
+    t0 = GetTickMs();
     do {
-        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL8, &voltage, &d_rdy);
+        e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL8, &voltage, &d_rdy);
+        if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
     vcells[module_id][7] = voltage;
 
+    t0 = GetTickMs();
     do {
-        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL12, &voltage, &d_rdy);
+        e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL12, &voltage, &d_rdy);
+        if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
     vcells[module_id][8] = voltage;
 
+    t0 = GetTickMs();
     do {
-        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL13, &voltage, &d_rdy);
+        e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL13, &voltage, &d_rdy);
+        if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
     vcells[module_id][9] = voltage;
 
+    t0 = GetTickMs();
     do {
-        e = L9963E_read_cell_voltage(&hl9963e, module_id, L9963E_CELL14, &voltage, &d_rdy);
+        e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL14, &voltage, &d_rdy);
+        if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
     vcells[module_id][10] = voltage;
 
     /******* READING TOTAL BATTERY VOLTAGES *******/
+    t0 = GetTickMs();
     do {
         e = L9963E_read_batt_voltage(
-            &hl9963e, module_id, ((uint16_t *)&(vtot[module_id])), ((uint32_t *)&(vsumbatt[module_id])));
+            &hl9963e, device_id, ((uint16_t *)&(vtot[module_id])), ((uint32_t *)&(vsumbatt[module_id])));
+        if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK);
 
     if (!read_gpio)
         return;
 
     /******* READING GPIO VOLTAGES *******/
+    t0 = GetTickMs();
     do {
-        e = L9963E_read_gpio_voltage(&hl9963e, module_id, L9963E_GPIO3, &voltage, &d_rdy);
+        e = L9963E_read_gpio_voltage(&hl9963e, device_id, L9963E_GPIO3, &voltage, &d_rdy);
+        if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
     vgpio[module_id][0] = voltage;
 
+    t0 = GetTickMs();
     do {
-        e = L9963E_read_gpio_voltage(&hl9963e, module_id, L9963E_GPIO4, &voltage, &d_rdy);
+        e = L9963E_read_gpio_voltage(&hl9963e, device_id, L9963E_GPIO4, &voltage, &d_rdy);
+        if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
     vgpio[module_id][1] = voltage;
 
+    t0 = GetTickMs();
     do {
-        e = L9963E_read_gpio_voltage(&hl9963e, module_id, L9963E_GPIO5, &voltage, &d_rdy);
+        e = L9963E_read_gpio_voltage(&hl9963e, device_id, L9963E_GPIO5, &voltage, &d_rdy);
+        if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
     vgpio[module_id][2] = voltage;
 
+    t0 = GetTickMs();
     do {
-        e = L9963E_read_gpio_voltage(&hl9963e, module_id, L9963E_GPIO6, &voltage, &d_rdy);
+        e = L9963E_read_gpio_voltage(&hl9963e, device_id, L9963E_GPIO6, &voltage, &d_rdy);
+        if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
     vgpio[module_id][3] = voltage;
 
+    t0 = GetTickMs();
     do {
-        e = L9963E_read_gpio_voltage(&hl9963e, module_id, L9963E_GPIO7, &voltage, &d_rdy);
+        e = L9963E_read_gpio_voltage(&hl9963e, device_id, L9963E_GPIO7, &voltage, &d_rdy);
+        if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
     vgpio[module_id][4] = voltage;
 
+    t0 = GetTickMs();
     do {
-        e = L9963E_read_gpio_voltage(&hl9963e, module_id, L9963E_GPIO8, &voltage, &d_rdy);
+        e = L9963E_read_gpio_voltage(&hl9963e, device_id, L9963E_GPIO8, &voltage, &d_rdy);
+        if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
     vgpio[module_id][5] = voltage;
 
+    t0 = GetTickMs();
     do {
-        e = L9963E_read_gpio_voltage(&hl9963e, module_id, L9963E_GPIO9, &voltage, &d_rdy);
+        e = L9963E_read_gpio_voltage(&hl9963e, device_id, L9963E_GPIO9, &voltage, &d_rdy);
+        if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
     vgpio[module_id][6] = voltage;
 
@@ -282,11 +328,16 @@ L9963_Utils_StatusTypeDef L9963E_utils_balance_cells(void) {
 
     // Check sequentially for each device if the balancing is finished
     // To check for eof_bal = 1 and bal_on = 0 to finish the balancing
-    for (uint8_t device_id = 0; device_id < N_SLAVES; device_id++) {
+    // Device ID parte da 1 (0 = broadcast, non valido per letture)
+    for (uint8_t device_id = 1; device_id <= N_SLAVES; device_id++) {
+        uint32_t t0 = GetTickMs();
         do {
             e = L9963E_read_balancing_state(&hl9963e, device_id, &eof_bal, &bal_on);
+            if (GetTickMs() - t0 > 30000U) break;  // 30s max per bilanciamento
         } while (e != L9963E_OK || ((eof_bal != 1) || (bal_on != 0)));
     }
+
+    //VERSIONE VELOCE PER CONTROLLARE IL TERMINE BILANCIAMENTO QUIDNI NON SINGOLARMENTE
     // while ((eof_bal != N_SLAVES) && (bal_on != 0)) {
     //     if (L9963E_DRV_burst_cmd(
     //             &hl9963e.drv_handle, L9963E_DEVICE_BROADCAST, burst_cmd, burst_data, L9963E_BURST_0x78_LEN, 10) !=
