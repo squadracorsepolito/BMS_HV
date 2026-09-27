@@ -280,6 +280,13 @@ L9963E_StatusTypeDef _L9963E_DRV_reg_cmd(L9963E_DRV_HandleTypeDef *handle,
         return errorcode;
     }
 
+    /* Per una write broadcast (device=0) lo slave risponde con il proprio chip_ID,
+     * non con 0. La wait_and_receive cercherebbe devid==0 e andrebbe sempre in
+     * timeout. Saltiamo il readback: i dati sono stati inviati in broadcast. */
+    if (is_write && device == L9963E_DEVICE_BROADCAST) {
+        return L9963E_OK;
+    }
+
     errorcode = _L9963E_DRV_wait_and_receive(&frame, handle, device, L9963E_DRV_GETTICK(handle), timeout);
 
     if (errorcode != L9963E_OK) {

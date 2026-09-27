@@ -46,6 +46,9 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
     }
 #endif
 
+    // Salva is_dual_ring nel handle — usato a fine procedura per configurare Farthest_Unit
+    handle->is_dual_ring = is_dual_ring;
+
     while (x <= handle->slave_n) {
         write_reg.generic = 0;
         read_reg.generic  = 0;
