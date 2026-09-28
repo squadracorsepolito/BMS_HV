@@ -28,8 +28,20 @@ const L9963E_IfTypeDef interface_L = {.L9963E_IF_DelayMs       = DelayMs,
 void L9963E_utils_init(void) {
     L9963E_init(&hl9963e, interface_H, N_SLAVES);
     /* is_dual_ring=0: anello singolo, solo lato H (L9963TH).
-     * Il chip farthest mantiene isotx_en_h=1 e risponde via ISO_H al L9963TH. */
-    L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1);
+     * isotx_en_h=0: slave risponde via ISO_L → stesso cavo → L9963TH riceve. */
+
+    /* Retry fino a 3 volte: al primo tentativo il t_SHUT potrebbe essere già scaduto
+     * se c'è latenza tra wakeup e broadcast; il retry rimanda un wakeup fresco. */
+    {
+        L9963E_StatusTypeDef addr_ret = L9963E_TIMEOUT;
+        for (uint8_t _attempt = 0; _attempt < 3U && addr_ret != L9963E_OK; ++_attempt) {
+            addr_ret = L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1);
+        }
+        /* Se addr_ret != L9963E_OK dopo 3 tentativi: Farthest_Unit NON è stato settato,
+         * le letture unicast falliranno tutte. Verificare: cavo ISOHp/ISOHm→ISOLp/ISOLm,
+         * alimentazione VCOM slave, connessione fisica. */
+        (void)addr_ret;
+    }
 
     /** Configuring the chips by writing to the registers, since each chip 
         has the same configuration, we are using Broadcast access 

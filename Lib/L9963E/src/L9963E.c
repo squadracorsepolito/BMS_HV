@@ -68,7 +68,7 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
             // by default the wakeup procedure needs 2 ms of time (T_WAKEUP)
             L9963E_DRV_DELAY(&(handle->drv_handle), 2);
 
-            //send broadcast command setting the chip_idz
+            //send broadcast command setting the chip_id
             write_reg.generic                  = L9963E_DEV_GEN_CFG_DEFAULT;
             write_reg.DEV_GEN_CFG.chip_ID      = x;
             write_reg.DEV_GEN_CFG.iso_freq_sel = 0b00;
@@ -76,6 +76,18 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
 
             L9963E_DRV_reg_write(
                 &(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
+
+            /* FIX: Farthest_Unit NON è scrivibile in Init state (DS §4.1.2.2).
+             * La broadcast sopra ha portato la slave in Normal state (chip_ID=x assegnato).
+             * In Normal state possiamo fare una unicast write per settare Farthest_Unit=1.
+             * La slave processa la write (Farthest_Unit→1) PRIMA di inviare la risposta
+             * (echo), quindi può già rispondere con Farthest_Unit=1 attivo.
+             * Così al prossimo giro il reg_read ha successo → ++x → loop esce. */
+            if (x == handle->slave_n && !is_dual_ring) {
+                write_reg.DEV_GEN_CFG.Farthest_Unit = 0b1;
+                L9963E_DRV_reg_write(
+                    &(handle->drv_handle), x, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
+            }
         }
     }
 
@@ -91,6 +103,7 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
 
     L9963E_DRV_reg_write(&(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
 
+    write_reg.DEV_GEN_CFG.chip_ID       = handle->slave_n; // chip_ID è locked → echo risponde con slave_n, non 0
     write_reg.DEV_GEN_CFG.Farthest_Unit = 0b1;
     // isotx_en_h resta 0 (già impostato sopra): farthest unit risponde via ISO_L → torna a TH via stesso cavo
     // (hardware: Master TH ISO_H → Slave ISO_L, risposta half-duplex sullo stesso cavo)
