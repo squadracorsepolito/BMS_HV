@@ -29,6 +29,25 @@ L9963E_StatusTypeDef L9963E_init(L9963E_HandleTypeDef *handle, L9963E_IfTypeDef 
     return L9963E_DRV_init(&(handle->drv_handle), interface);
 }
 
+L9963E_StatusTypeDef L9963E_init_dual_ring(L9963E_HandleTypeDef *handle,
+                                           L9963E_IfTypeDef tx_interface,
+                                           L9963E_IfTypeDef rx_interface,
+                                           uint8_t slave_n) {
+#if L9963E_DEBUG
+    if (handle == NULL) {
+        return L9963E_ERROR;
+    }
+
+    if (slave_n >= 32) {
+        return L9963E_ERROR;
+    }
+#endif
+
+    handle->slave_n = slave_n;
+
+    return L9963E_DRV_init_dual_ring(&(handle->drv_handle), tx_interface, rx_interface);
+}
+
 L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
                                                  uint8_t iso_freq_sel,
                                                  uint8_t is_dual_ring,
@@ -46,6 +65,10 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
     }
 #endif
 
+    /* Salva is_dual_ring in entrambi i livelli dell'handle */
+    handle->is_dual_ring             = is_dual_ring;
+    handle->drv_handle.is_dual_ring  = is_dual_ring;
+
     while (x <= handle->slave_n) {
         write_reg.generic = 0;
         read_reg.generic  = 0;
@@ -56,7 +79,7 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
             ++x;
             tick = L9963E_DRV_GETTICK(&(handle->drv_handle));
         } else {
-            if (L9963E_DRV_GETTICK(&(handle->drv_handle)) - tick >= 10) {
+            if (L9963E_DRV_GETTICK(&(handle->drv_handle)) - tick >= 100) {
                 return L9963E_TIMEOUT;
             }
 
@@ -65,35 +88,59 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
             // by default the wakeup procedure needs 2 ms of time (T_WAKEUP)
             L9963E_DRV_DELAY(&(handle->drv_handle), 2);
 
-            //send broadcast command setting the chip_idz
+            //send broadcast command setting the chip_id
             write_reg.generic                  = L9963E_DEV_GEN_CFG_DEFAULT;
             write_reg.DEV_GEN_CFG.chip_ID      = x;
             write_reg.DEV_GEN_CFG.iso_freq_sel = 0b00;
-            write_reg.DEV_GEN_CFG.isotx_en_h   = 0b1;
+            /* isotx_en_h:
+             *   0 = slave risponde via ISO_L → stesso cavo → TH (anello singolo)
+             *   1 = slave risponde via ISO_H → TL ISO_L → SPI2 (doppio anello) */
+            write_reg.DEV_GEN_CFG.isotx_en_h   = is_dual_ring ? 0b1 : 0b0;
 
             L9963E_DRV_reg_write(
                 &(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
+
+            /* FIX: Farthest_Unit NON è scrivibile in Init state (DS §4.1.2.2).
+             * La broadcast sopra ha portato la slave in Normal state (chip_ID=x assegnato).
+             * In Normal state possiamo fare una unicast write per settare Farthest_Unit=1.
+             * La slave processa la write (Farthest_Unit→1) PRIMA di inviare la risposta
+             * (echo), quindi può già rispondere con Farthest_Unit=1 attivo.
+             * Così al prossimo giro il reg_read ha successo → ++x → loop esce. */
+            if (x == handle->slave_n && !is_dual_ring) {
+                write_reg.DEV_GEN_CFG.Farthest_Unit = 0b1;
+                L9963E_DRV_reg_write(
+                    &(handle->drv_handle), x, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
+            }
         }
     }
 
     write_reg.generic                    = L9963E_DEV_GEN_CFG_DEFAULT;
-    write_reg.DEV_GEN_CFG.isotx_en_h     = 0b1;
+    /* isotx_en_h broadcast finale:
+     *   0 → slave risponde via ISO_L (anello singolo, half-duplex TH)
+     *   1 → slave risponde via ISO_H → TL ISO_L (doppio anello) */
+    write_reg.DEV_GEN_CFG.isotx_en_h     = is_dual_ring ? 0b1 : 0b0;
     write_reg.DEV_GEN_CFG.out_res_tx_iso = out_res_tx_iso;
     write_reg.DEV_GEN_CFG.iso_freq_sel   = iso_freq_sel;
 
-    if (iso_freq_sel == 0b11)
+    if (iso_freq_sel == 0b11) {
         L9963E_DRV_ISOFREQ_HIGH(&(handle->drv_handle));
-    else
+        if (is_dual_ring) L9963E_DRV_RX_ISOFREQ_HIGH(&(handle->drv_handle)); /* TL segue la stessa freq */
+    } else {
         L9963E_DRV_ISOFREQ_LOW(&(handle->drv_handle));
+        if (is_dual_ring) L9963E_DRV_RX_ISOFREQ_LOW(&(handle->drv_handle));
+    }
 
     L9963E_DRV_reg_write(&(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
 
-    write_reg.DEV_GEN_CFG.Farthest_Unit = 0b1;
-    if (!handle->is_dual_ring) {
-        write_reg.DEV_GEN_CFG.isotx_en_h = 0;
+    /* Unicast Farthest_Unit → solo in anello singolo.
+     * In doppio anello la slave risponde via ISO_H (isotx_en_h=1): non serve l'eco in catena,
+     * quindi Farthest_Unit non è necessario e NON va impostato. */
+    if (!is_dual_ring) {
+        write_reg.DEV_GEN_CFG.chip_ID       = handle->slave_n;
+        write_reg.DEV_GEN_CFG.Farthest_Unit = 0b1;
+        /* isotx_en_h resta 0: risponde via ISO_L → TH (già nel write_reg sopra) */
+        L9963E_DRV_reg_write(&(handle->drv_handle), handle->slave_n, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
     }
-
-    L9963E_DRV_reg_write(&(handle->drv_handle), handle->slave_n, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
 
     if (lock_isofreq == 1) {
         write_reg.generic                 = L9963E_BAL_3_DEFAULT;
