@@ -118,6 +118,16 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
     uint8_t c_done = 0;
     uint32_t t0;
 
+    /* KEEPALIVE: broadcast write per resettare il watchdog da 60s del L9963E
+     * anche se l'addressing non ha ancora assegnato chip_ID. Scrive fastch_baluv
+     * (CommTimeout=256ms) — innocuo, idempotente, accettato da qualsiasi chip_ID. */
+    {
+        L9963E_RegisterUnionTypeDef ka_reg = {.generic = L9963E_FASTCH_BALUV_DEFAULT};
+        ka_reg.fastch_baluv.CommTimeout    = 0b01;  // _256MS
+        L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST,
+                             L9963E_fastch_baluv_ADDR, &ka_reg, 10);
+    }
+
     /* Attende che l'eventuale conversione precedente sia terminata */
     t0 = GetTickMs();
     do {
