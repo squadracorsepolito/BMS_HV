@@ -75,7 +75,9 @@ void L9963E_utils_init(void) {
     L9963E_enable_vref(&hl9963e, L9963E_DEVICE_BROADCAST, 1);
 
     // Set communication timeout and enable cells
-    L9963E_setCommTimeout(&hl9963e, _256MS, L9963E_DEVICE_BROADCAST, 0);
+    /* CommTimeout: _2048MS per dare al firmware più margine durante letture lente.
+     * _256MS era troppo aggressivo: con 14 letture × ~1ms cadauna il timeout scattava. */
+    L9963E_setCommTimeout(&hl9963e, _2048MS, L9963E_DEVICE_BROADCAST, 0);
     L9963E_set_enabled_cells(&hl9963e, L9963E_DEVICE_BROADCAST, ENABLED_CELLS);
 
     /* Configuring balancing operations: Timed Balancing | 20s treshold*/
