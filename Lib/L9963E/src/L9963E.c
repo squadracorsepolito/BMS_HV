@@ -131,6 +131,18 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
         if (is_dual_ring) L9963E_DRV_RX_ISOFREQ_LOW(&(handle->drv_handle));
     }
 
+    if (is_dual_ring) {
+        /* L9963T campiona ISOFREQ solo sul fronte di discesa di NCS (DS L9963T Tab. 9).
+         * Il TL viene selezionato solo quando leggiamo: senza questo NCS "a vuoto" resterebbe
+         * in RX lenta e perderebbe la prima risposta veloce. Con TXEN(TL)=0 i byte su MOSI
+         * sono scartati; l'eventuale frame vecchio in coda viene letto e buttato. */
+        uint8_t dummy[5] = {0};
+        L9963E_DRV_DELAY(&(handle->drv_handle), 1); /* setup ISOFREQ > 1.4 us */
+        L9963E_DRV_RX_CS_LOW(&(handle->drv_handle));
+        (void)L9963E_DRV_RX_SPI_RECEIVE(&(handle->drv_handle), dummy, 5, 10);
+        L9963E_DRV_RX_CS_HIGH(&(handle->drv_handle));
+    }
+
     L9963E_DRV_reg_write(&(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
 
     /* Unicast Farthest_Unit → solo in anello singolo.
