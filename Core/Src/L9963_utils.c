@@ -27,7 +27,11 @@ const L9963E_IfTypeDef interface_L = {.L9963E_IF_DelayMs       = DelayMs,
 // TRYING TO FIGURE OUT HOW TO INITIALIZE THE DRIVER HANDLE
 void L9963E_utils_init(void) {
     L9963E_init(&hl9963e, interface_H, N_SLAVES);
-    L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1);
+    /* is_dual_ring=1: mantiene isotx_en_h=1 sul chip Farthest_Unit.
+     * Con is_dual_ring=0 il codice forza isotx_en_h=0 → L9963E non può rispondere
+     * via ISO_H → BNE non va mai HIGH → nessuna lettura funziona.
+     * Con un singolo chip e un solo L9963TH (anello H), il chip deve TX su ISO_H. */
+    L9963E_addressing_procedure(&hl9963e, 0b11, 1, 0, 1);
 
     /** Configuring the chips by writing to the registers, since each chip 
         has the same configuration, we are using Broadcast access 
