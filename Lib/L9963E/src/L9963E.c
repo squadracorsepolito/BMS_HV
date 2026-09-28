@@ -72,7 +72,7 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
             write_reg.generic                  = L9963E_DEV_GEN_CFG_DEFAULT;
             write_reg.DEV_GEN_CFG.chip_ID      = x;
             write_reg.DEV_GEN_CFG.iso_freq_sel = 0b00;
-            write_reg.DEV_GEN_CFG.isotx_en_h   = 0b1;
+            write_reg.DEV_GEN_CFG.isotx_en_h   = 0b0; // risponde via ISO_L → torna su ISO_H del master (TH)
 
             L9963E_DRV_reg_write(
                 &(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
@@ -80,7 +80,7 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
     }
 
     write_reg.generic                    = L9963E_DEV_GEN_CFG_DEFAULT;
-    write_reg.DEV_GEN_CFG.isotx_en_h     = 0b1;
+    write_reg.DEV_GEN_CFG.isotx_en_h     = 0b0; // isotx_en_h=0: risponde via ISO_L → stesso cavo → TH
     write_reg.DEV_GEN_CFG.out_res_tx_iso = out_res_tx_iso;
     write_reg.DEV_GEN_CFG.iso_freq_sel   = iso_freq_sel;
 
@@ -92,11 +92,8 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
     L9963E_DRV_reg_write(&(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
 
     write_reg.DEV_GEN_CFG.Farthest_Unit = 0b1;
-    /* Single ring (is_dual_ring=0): il chip farthest risponde via ISO_H → serve isotx_en_h=1.
-     * Dual ring   (is_dual_ring=1): il chip farthest risponde via ISO_L → ISO_H TX non serve. */
-    if (handle->is_dual_ring) {
-        write_reg.DEV_GEN_CFG.isotx_en_h = 0;
-    }
+    // isotx_en_h resta 0 (già impostato sopra): farthest unit risponde via ISO_L → torna a TH via stesso cavo
+    // (hardware: Master TH ISO_H → Slave ISO_L, risposta half-duplex sullo stesso cavo)
 
     L9963E_DRV_reg_write(&(handle->drv_handle), handle->slave_n, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
 
