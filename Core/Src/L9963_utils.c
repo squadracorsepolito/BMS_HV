@@ -25,23 +25,25 @@ const L9963E_IfTypeDef interface_L = {.L9963E_IF_DelayMs       = DelayMs,
                                       .L9963E_IF_SPI_Transmit  = L9963TL_SPI_Transmit};
 
 void L9963E_utils_init(void) {
-    /* Doppio anello: TH (SPI3) per TX dei comandi, TL (SPI2) per RX delle risposte.
-     * TH: ISO_H → Slave ISO_L (comandi)
-     * TL: Slave ISO_H → TL ISO_L → SPI2 (risposte, isotx_en_h=1 nello slave)
-     * Entrambi i transceiver sono NSLAVE=0 (SPI Slave mode), STM32 è SPI Master. */
-    L9963E_init_dual_ring(&hl9963e, interface_H, interface_L, N_SLAVES);
+    /* ANELLO SINGOLO: solo TH (SPI3) usato sia per TX che per RX.
+     * Topologia: MCU SPI3 → TH (TXEN=HIGH) → ISO_H → Slave ISO_L  (comandi)
+     *            Slave ISO_L → ISO_H di TH (TXEN=LOW, receive mode) → SPI3 MISO  (risposte)
+     * L'ultimo slave deve avere Farthest_Unit=1 per echeggiare le risposte sul cavo.
+     * isotx_en_h=0 nello slave: risponde via ISO_L (stesso cavo del comando).
+     * TL (SPI2) NON utilizzato in questa configurazione. */
+    L9963E_init(&hl9963e, interface_H, N_SLAVES);
 
     /* Retry fino a 3 volte: al primo tentativo il t_SHUT potrebbe essere già scaduto
      * se c'è latenza tra wakeup e broadcast; il retry rimanda un wakeup fresco. */
     {
         L9963E_StatusTypeDef addr_ret = L9963E_TIMEOUT;
         for (uint8_t _attempt = 0; _attempt < 3U && addr_ret != L9963E_OK; ++_attempt) {
-            /* is_dual_ring=1: isotx_en_h=1 nello slave, risposta via ISO_H→TL */
-            addr_ret = L9963E_addressing_procedure(&hl9963e, 0b11, 1, 0, 1);
+            /* is_dual_ring=0: isotx_en_h=0 nello slave (risponde via ISO_L → TH)
+             * Farthest_Unit=1 verrà settato automaticamente sull'ultimo slave. */
+            addr_ret = L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1);
         }
-        /* Se addr_ret != L9963E_OK dopo 3 tentativi: Farthest_Unit NON è stato settato,
-         * le letture unicast falliranno tutte. Verificare: cavo ISOHp/ISOHm→ISOLp/ISOLm,
-         * alimentazione VCOM slave, connessione fisica. */
+        /* Se addr_ret != L9963E_OK dopo 3 tentativi: verificare cavo ISO_H (TH→slave),
+         * alimentazione VCOM slave, connessione fisica. Farthest_Unit non settato. */
         (void)addr_ret;
     }
 
@@ -75,7 +77,9 @@ void L9963E_utils_init(void) {
     L9963E_enable_vref(&hl9963e, L9963E_DEVICE_BROADCAST, 1);
 
     // Set communication timeout and enable cells
-    L9963E_setCommTimeout(&hl9963e, _256MS, L9963E_DEVICE_BROADCAST, 0);
+    /* CommTimeout: _2048MS per dare al firmware più margine durante letture lente.
+     * _256MS era troppo aggressivo: con 14 letture × ~1ms cadauna il timeout scattava. */
+    L9963E_setCommTimeout(&hl9963e, _2048MS, L9963E_DEVICE_BROADCAST, 0);
     L9963E_set_enabled_cells(&hl9963e, L9963E_DEVICE_BROADCAST, ENABLED_CELLS);
 
     /* Configuring balancing operations: Timed Balancing | 20s treshold*/

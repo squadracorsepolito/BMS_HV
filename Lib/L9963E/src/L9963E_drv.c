@@ -190,13 +190,27 @@ L9963E_StatusTypeDef _L9963E_DRV_spi_transmit(L9963E_DRV_HandleTypeDef *handle,
     L9963E_DRV_TXEN_HIGH(handle);
     L9963E_DRV_CS_LOW(handle);
     errorcode = L9963E_DRV_SPI_TRANSMIT(handle, data, len, timeout);
+    L9963E_DRV_CS_HIGH(handle);  /* Fine transazione SPI: TH ha ricevuto tutti i byte */
+
+    /* BUG FIX (CRITICO): CS_HIGH deve precedere qualsiasi cambio di TXEN e
+     * bisogna attendere che TH completi la trasmissione ISO prima del prossimo frame.
+     *
+     * SPI (5.6 MHz) completa 5 byte in ~7 µs; ISO (500 kbps) impiega ~80 µs per 40 bit.
+     * Se TXEN va LOW prima di CS_HIGH (vecchio codice, righe 193-198 pre-fix):
+     *   - Latched mode: TH non inizia la TX ISO (TXEN già LOW quando CS_HIGH)
+     *   - Streaming mode: TH interrompe ISO a metà → CRC invalido → slave ignora il frame
+     * Senza il delay: il frame successivo arriva mentre TH sta ancora trasmettendo su ISO
+     * → TH abortisce il frame in corso → slave riceve dati corrotti.
+     * Con 1 ms (>> 80 µs @ 500 kbps, >> 10 µs @ 4 Mbps) siamo sicuri per tutte le freq. */
+    L9963E_DRV_DELAY(handle, 1);  /* Attende il completamento del frame ISO su TH */
+
     if (!handle->is_dual_ring) {
-        /* Anello singolo: dopo TX porta TH in modalità RX (TXEN=LOW) così
-         * la risposta della slave (stessa coppia di fili) può tornare indietro.
-         * Dual-ring: TH rimane TXEN=HIGH (solo TX); la risposta arriva via TL. */
+        /* Anello singolo: porta TH in modalità RX (TXEN=LOW) così
+         * la risposta della slave (stesso cavo ISO_H) può tornare indietro via TH MISO. */
         L9963E_DRV_TXEN_LOW(handle);
     }
-    L9963E_DRV_CS_HIGH(handle);
+    /* Dual-ring: TH rimane TXEN=HIGH (solo TX); la risposta slave
+     * arriva via ISO_H della slave → ISO_L del TL → SPI2. */
 
     return errorcode;
 }
