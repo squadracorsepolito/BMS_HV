@@ -65,9 +65,12 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
     }
 #endif
 
-    /* Salva is_dual_ring in entrambi i livelli dell'handle */
+    /* Durante l'addressing le risposte si leggono SEMPRE dal TH (lato basso), anche in doppio
+     * anello (DS L9963E §4.2.3.2: "the addressing procedure follows the standard approach"):
+     * le slave non ancora indirizzate hanno la porta H spenta e non farebbero salire le
+     * risposte fino al TL. Il passaggio al TL avviene a fine procedura. */
     handle->is_dual_ring             = is_dual_ring;
-    handle->drv_handle.is_dual_ring  = is_dual_ring;
+    handle->drv_handle.is_dual_ring  = 0;
 
     while (x <= handle->slave_n) {
         write_reg.generic = 0;
@@ -116,6 +119,14 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
         }
     }
 
+    if (is_dual_ring) {
+        /* Da qui in poi: TH solo TX (TXEN fisso alto), risposte lette dal TL.
+         * TXEN deve essere stabile >1.4 us prima del prossimo NCS↓: lo garantisce il delay
+         * di 1 ms all'inizio di _L9963E_DRV_spi_transmit. */
+        handle->drv_handle.is_dual_ring = 1;
+        L9963E_DRV_TXEN_HIGH(&(handle->drv_handle));
+    }
+
     write_reg.generic                    = L9963E_DEV_GEN_CFG_DEFAULT;
     /* Broadcast finale con isotx_en_h=1 (tutte le slave inoltrano verso l'alto).
      * In anello singolo la unicast successiva spegne la porta H dell'ultima slave. */
@@ -137,10 +148,13 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
          * in RX lenta e perderebbe la prima risposta veloce. Con TXEN(TL)=0 i byte su MOSI
          * sono scartati; l'eventuale frame vecchio in coda viene letto e buttato. */
         uint8_t dummy[5] = {0};
+        uint8_t n        = 0;
         L9963E_DRV_DELAY(&(handle->drv_handle), 1); /* setup ISOFREQ > 1.4 us */
-        L9963E_DRV_RX_CS_LOW(&(handle->drv_handle));
-        (void)L9963E_DRV_RX_SPI_RECEIVE(&(handle->drv_handle), dummy, 5, 10);
-        L9963E_DRV_RX_CS_HIGH(&(handle->drv_handle));
+        do { /* svuota anche i frame accumulati dal TL durante l'addressing (max 20 in coda) */
+            L9963E_DRV_RX_CS_LOW(&(handle->drv_handle));
+            (void)L9963E_DRV_RX_SPI_RECEIVE(&(handle->drv_handle), dummy, 5, 10);
+            L9963E_DRV_RX_CS_HIGH(&(handle->drv_handle));
+        } while (L9963E_DRV_RX_BNE_READ(&(handle->drv_handle)) == L9963E_IF_GPIO_PIN_SET && ++n < 25U);
     }
 
     L9963E_DRV_reg_write(&(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
