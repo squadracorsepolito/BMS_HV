@@ -104,3 +104,16 @@ float ntc_get_int_temp(uint8_t index) {
     return ADCTEMP_INT_CONST_a + ADCTEMP_INT_CONST_b * val + ADCTEMP_INT_CONST_c * val2 + ADCTEMP_INT_CONST_d * val3 +
            ADCTEMP_INT_CONST_e * val4;
 }
+
+/* Converte una lettura GPIO grezza della L9963E (LSB = 89 uV) in °C,
+ * con lo stesso polinomio di ntc_get_ext_temp ma senza filtro esponenziale.
+ * Usata solo per la stampa di debug. */
+float ntc_raw_to_temp(uint16_t raw) {
+    float val  = raw * 0.000089f;
+    float val2 = val * val;
+    float val3 = val2 * val;
+    float val4 = val2 * val2;
+
+    return ADCTEMP_EXT_CONST_a + ADCTEMP_EXT_CONST_b * val + ADCTEMP_EXT_CONST_c * val2 + ADCTEMP_EXT_CONST_d * val3 +
+           ADCTEMP_EXT_CONST_e * val4;
+}

@@ -33,4 +33,10 @@ float L9963E_utils_get_cell_mv(uint8_t module_id, uint8_t index);
 void L9963E_utils_get_batt_mv(float *v_tot, float *v_sum, uint8_t module);
 L9963_Utils_StatusTypeDef L9963E_utils_balance_cells(void);
 void L9963E_utils_get_total_batt_mv(float *v_tot, float *v_sum);
+/* Debug da terminale (USART3, 115200 8N1) */
+void L9963E_utils_debug_print(void);
+extern volatile uint8_t  l9963_addressing_ok;   /* 1 = wakeup + addressing riusciti */
+extern volatile uint32_t l9963_comm_errors;     /* letture fallite (timeout/CRC) dall'avvio */
+extern volatile uint32_t l9963_read_cycles;     /* cicli di lettura completati */
+extern volatile uint8_t  l9963_gpio_valid;      /* 1 = almeno una lettura NTC fatta */
 #endif  // L9963T_UTILS_H

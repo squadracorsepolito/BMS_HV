@@ -1,6 +1,8 @@
 #include "L9963_utils.h"
 #include "ntc.h"
 
+#include <stdio.h>
+
 /* Using L9963TH to send and receive data
     L9963TL will be used to check the correctness of communication
 */
@@ -9,6 +11,24 @@ volatile uint16_t vgpio[N_SLAVES][N_GPIOS_PER_SLAVE];
 volatile uint16_t vtot[N_SLAVES];
 volatile uint32_t vsumbatt[N_SLAVES];
 L9963E_HandleTypeDef hl9963e;
+
+volatile uint8_t  l9963_addressing_ok = 0;
+volatile uint32_t l9963_comm_errors   = 0;
+volatile uint32_t l9963_read_cycles   = 0;
+volatile uint8_t  l9963_gpio_valid    = 0;
+
+/* Legge un registro della slave 1 e stampa il risultato (verifica che i broadcast siano arrivati) */
+static void _dbg_check_reg(const char *name, L9963E_RegistersAddrTypeDef addr, uint32_t expected, uint32_t mask) {
+    L9963E_RegisterUnionTypeDef r = {0};
+    L9963E_StatusTypeDef e        = L9963E_DRV_reg_read(&(hl9963e.drv_handle), 1, addr, &r, 10);
+    if (e != L9963E_OK) {
+        printf("   [FAIL] %-14s lettura fallita (err=%d)\r\n", name, (int)e);
+    } else {
+        uint32_t got = r.generic & mask;
+        printf("   [%s] %-14s letto=0x%05lX atteso=0x%05lX\r\n", (got == (expected & mask)) ? " OK " : "FAIL", name,
+               (unsigned long)got, (unsigned long)(expected & mask));
+    }
+}
 
 const L9963E_IfTypeDef interface_H = {.L9963E_IF_DelayMs       = DelayMs,
                                       .L9963E_IF_GetTickMs     = GetTickMs,
@@ -31,7 +51,22 @@ void L9963E_utils_init(void) {
      * L'ultimo slave deve avere Farthest_Unit=1 per echeggiare le risposte sul cavo.
      * isotx_en_h=0 nello slave: risponde via ISO_L (stesso cavo del comando).
      * TL (SPI2) NON utilizzato in questa configurazione. */
+    printf("\r\n\r\n=========== BMS HV - avvio (anello singolo) ===========\r\n");
+    printf("[1] Init transceiver TH (SPI3): DIS=LOW, TXEN, ISOFREQ=LOW (slow)\r\n");
     L9963E_init(&hl9963e, interface_H, N_SLAVES);
+
+    /* Reset preventivo: se l'MCU è stato resettato/riflashato mentre la slave era ancora sveglia,
+     * la slave è in ISO VELOCE con Lock_isoh_isofreq=1 e non capirebbe i frame lenti dell'addressing.
+     * Mandiamo SW_RST+GO2SLP in broadcast a frequenza veloce: la slave si resetta (chip_ID=0,
+     * ISO lenta) e va in sleep; l'addressing successivo la risveglia pulita.
+     * L9963T applica il nuovo ISOFREQ in TX solo DOPO il frame che lo ha campionato:
+     * il 1° frame esce ancora lento, il 2° esce veloce. Se la slave dormiva, non cambia nulla. */
+    printf("[1b] Reset preventivo slave (SW_RST+GO2SLP in ISO veloce)\r\n");
+    L9963E_DRV_ISOFREQ_HIGH(&(hl9963e.drv_handle));
+    L9963E_sw_rst(&hl9963e, L9963E_DEVICE_BROADCAST, 1);
+    L9963E_sw_rst(&hl9963e, L9963E_DEVICE_BROADCAST, 1);
+    L9963E_DRV_ISOFREQ_LOW(&(hl9963e.drv_handle));
+    DelayMs(5);
 
     /* Retry fino a 3 volte: al primo tentativo il t_SHUT potrebbe essere già scaduto
      * se c'è latenza tra wakeup e broadcast; il retry rimanda un wakeup fresco. */
@@ -40,8 +75,13 @@ void L9963E_utils_init(void) {
         for (uint8_t _attempt = 0; _attempt < 3U && addr_ret != L9963E_OK; ++_attempt) {
             /* is_dual_ring=0: isotx_en_h=0 nello slave (risponde via ISO_L → TH)
              * Farthest_Unit=1 verrà settato automaticamente sull'ultimo slave. */
+            uint32_t t_start = GetTickMs();
+            printf("[2] Wakeup + addressing, tentativo %u/3 ...\r\n", (unsigned)(_attempt + 1U));
             addr_ret = L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1);
+            printf("    -> %s (%lu ms)\r\n", addr_ret == L9963E_OK ? "OK" : "TIMEOUT: la slave non risponde",
+                   (unsigned long)(GetTickMs() - t_start));
         }
+        l9963_addressing_ok = (addr_ret == L9963E_OK);
         /* Se addr_ret != L9963E_OK dopo 3 tentativi: verificare cavo ISO_H (TH→slave),
          * alimentazione VCOM slave, connessione fisica. Farthest_Unit non settato. */
         (void)addr_ret;
@@ -56,7 +96,8 @@ void L9963E_utils_init(void) {
     // GPIO7            → digital input (CONFIG=1): è collegato a GND da schematico,
     //                    non è un NTC; lo escludiamo dalle conversioni analogiche
     L9963E_RegisterUnionTypeDef gpio9_3_conf_reg = {.generic = L9963E_GPIO9_3_CONF_DEFAULT};
-    gpio9_3_conf_reg.GPIO9_3_CONF.GPIO7_CONFIG   = 1;  // digital: GPIO7 a GND, non NTC
+    /* GPIOx_CONFIG (DS L9963E reg 0x14): 00=analog, 01=NON USARE, 10=digital in, 11=digital out */
+    gpio9_3_conf_reg.GPIO9_3_CONF.GPIO7_CONFIG   = 0b10;  // digital input: GPIO7 a GND, non NTC
     gpio9_3_conf_reg.GPIO9_3_CONF.GPIO8_CONFIG   = 0;  // analog: NTC1
     L9963E_DRV_reg_write(
         &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_GPIO9_3_CONF_ADDR, &gpio9_3_conf_reg, 10);
@@ -127,6 +168,77 @@ void L9963E_utils_init(void) {
         &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_BalCell6_1act_ADDR, &bal_cell6_1act, 10);
     L9963E_DRV_reg_write(
         &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_BalCell14_7act_ADDR, &bal_cell14_7act, 10);
+
+    /* ---- Verifica da terminale: rilegge dalla slave 1 i registri scritti in broadcast ---- */
+    printf("[3] Verifica configurazione slave 1 (rilettura registri):\r\n");
+    {
+        L9963E_RegisterUnionTypeDef exp = {.generic = L9963E_DEV_GEN_CFG_DEFAULT};
+        L9963E_RegisterUnionTypeDef msk = {.generic = 0};
+        exp.DEV_GEN_CFG.chip_ID       = 1;
+        exp.DEV_GEN_CFG.isotx_en_h    = (N_SLAVES == 1) ? 0 : 1;
+        exp.DEV_GEN_CFG.iso_freq_sel  = 0b11;
+        exp.DEV_GEN_CFG.Farthest_Unit = (N_SLAVES == 1) ? 1 : 0;
+        msk.DEV_GEN_CFG.chip_ID       = 0x1F;
+        msk.DEV_GEN_CFG.isotx_en_h    = 1;
+        msk.DEV_GEN_CFG.iso_freq_sel  = 0b11;
+        msk.DEV_GEN_CFG.Farthest_Unit = 1;
+        _dbg_check_reg("DEV_GEN_CFG", L9963E_DEV_GEN_CFG_ADDR, exp.generic, msk.generic);
+
+        exp.generic                   = 0;
+        msk.generic                   = 0;
+        exp.fastch_baluv.CommTimeout  = _2048MS;
+        msk.fastch_baluv.CommTimeout  = 0b11;
+        _dbg_check_reg("CommTimeout", L9963E_fastch_baluv_ADDR, exp.generic, msk.generic);
+
+        exp.generic                   = 0;
+        exp.VCELLS_EN.VCELL1_EN = 1; exp.VCELLS_EN.VCELL2_EN = 1; exp.VCELLS_EN.VCELL3_EN = 1;
+        exp.VCELLS_EN.VCELL4_EN = 1; exp.VCELLS_EN.VCELL5_EN = 1; exp.VCELLS_EN.VCELL6_EN = 1;
+        exp.VCELLS_EN.VCELL7_EN = 1; exp.VCELLS_EN.VCELL8_EN = 1; exp.VCELLS_EN.VCELL12_EN = 1;
+        exp.VCELLS_EN.VCELL13_EN = 1; exp.VCELLS_EN.VCELL14_EN = 1;
+        _dbg_check_reg("VCELLS_EN", L9963E_VCELLS_EN_ADDR, exp.generic, 0x3FFF);
+
+        _dbg_check_reg("GPIO9_3_CONF", L9963E_GPIO9_3_CONF_ADDR, gpio9_3_conf_reg.generic, 0x3F000);
+    }
+    if (l9963_addressing_ok) {
+        printf("==> WAKEUP + ADDRESSING OK: la slave risponde. Inizio letture ogni 100 ms.\r\n\r\n");
+    } else {
+        printf("==> ERRORE: nessuna risposta dalla slave. Controlla cavo ISO, alimentazione slave, TH.\r\n\r\n");
+    }
+}
+
+/* Stampa su terminale lo stato della comunicazione e le misure della slave.
+ * Chiamata dal main loop ogni 2 s. Solo interi (printf nano senza float). */
+void L9963E_utils_debug_print(void) {
+    static const uint8_t cell_num[N_CELLS_PER_SLAVE] = {1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 14};
+    static const uint8_t gpio_num[N_GPIOS_PER_SLAVE] = {3, 4, 5, 6, 8, 9};
+
+    printf("---- t=%lu ms | addressing=%s | cicli=%lu | errori com=%lu ----\r\n", (unsigned long)GetTickMs(),
+           l9963_addressing_ok ? "OK" : "FALLITO", (unsigned long)l9963_read_cycles,
+           (unsigned long)l9963_comm_errors);
+
+    for (uint8_t m = 0; m < N_SLAVES; ++m) {
+        printf("Slave %u - tensioni celle [mV]:\r\n", (unsigned)(m + 1));
+        for (uint8_t c = 0; c < N_CELLS_PER_SLAVE; ++c) {
+            uint32_t mv = ((uint32_t)vcells[m][c] * 89U) / 1000U; /* LSB = 89 uV */
+            printf("  C%-2u=%5lu", (unsigned)cell_num[c], (unsigned long)mv);
+            if ((c % 4) == 3) printf("\r\n");
+        }
+        /* VTOT: LSB 1.33 mV ; VSUM: LSB 89 uV */
+        printf("\r\n  Vtot(modulo)=%lu mV   Vsum(celle)=%lu mV\r\n",
+               (unsigned long)(((uint32_t)vtot[m] * 133U) / 100U), (unsigned long)(((uint64_t)vsumbatt[m] * 89U) / 1000U));
+
+        if (!l9963_gpio_valid) {
+            printf("  Temperature NTC: in attesa della prima lettura GPIO (ogni ~5 s)\r\n");
+        } else {
+            printf("  NTC [mV / gradi C x10]:\r\n");
+            for (uint8_t g = 0; g < N_GPIOS_PER_SLAVE; ++g) {
+                uint32_t mv = ((uint32_t)vgpio[m][g] * 89U) / 1000U;
+                int32_t t10 = (int32_t)(ntc_raw_to_temp(vgpio[m][g]) * 10.0f);
+                printf("  GPIO%u=%4lu mV T=%ld", (unsigned)gpio_num[g], (unsigned long)mv, (long)t10);
+                if ((g % 3) == 2) printf("\r\n");
+            }
+        }
+    }
 }
 
 void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
@@ -156,6 +268,7 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
         e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL1, &voltage, &d_rdy);
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
+    if (e != L9963E_OK || !d_rdy) l9963_comm_errors++;
     vcells[module_id][0] = voltage;
 
     t0 = GetTickMs();
@@ -163,6 +276,7 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
         e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL2, &voltage, &d_rdy);
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
+    if (e != L9963E_OK || !d_rdy) l9963_comm_errors++;
     vcells[module_id][1] = voltage;
 
     t0 = GetTickMs();
@@ -170,6 +284,7 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
         e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL3, &voltage, &d_rdy);
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
+    if (e != L9963E_OK || !d_rdy) l9963_comm_errors++;
     vcells[module_id][2] = voltage;
 
     t0 = GetTickMs();
@@ -177,6 +292,7 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
         e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL4, &voltage, &d_rdy);
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
+    if (e != L9963E_OK || !d_rdy) l9963_comm_errors++;
     vcells[module_id][3] = voltage;
 
     t0 = GetTickMs();
@@ -184,6 +300,7 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
         e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL5, &voltage, &d_rdy);
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
+    if (e != L9963E_OK || !d_rdy) l9963_comm_errors++;
     vcells[module_id][4] = voltage;
 
     t0 = GetTickMs();
@@ -191,6 +308,7 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
         e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL6, &voltage, &d_rdy);
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
+    if (e != L9963E_OK || !d_rdy) l9963_comm_errors++;
     vcells[module_id][5] = voltage;
 
     t0 = GetTickMs();
@@ -198,6 +316,7 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
         e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL7, &voltage, &d_rdy);
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
+    if (e != L9963E_OK || !d_rdy) l9963_comm_errors++;
     vcells[module_id][6] = voltage;
 
     t0 = GetTickMs();
@@ -205,6 +324,7 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
         e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL8, &voltage, &d_rdy);
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
+    if (e != L9963E_OK || !d_rdy) l9963_comm_errors++;
     vcells[module_id][7] = voltage;
 
     t0 = GetTickMs();
@@ -212,6 +332,7 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
         e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL12, &voltage, &d_rdy);
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
+    if (e != L9963E_OK || !d_rdy) l9963_comm_errors++;
     vcells[module_id][8] = voltage;
 
     t0 = GetTickMs();
@@ -219,6 +340,7 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
         e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL13, &voltage, &d_rdy);
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
+    if (e != L9963E_OK || !d_rdy) l9963_comm_errors++;
     vcells[module_id][9] = voltage;
 
     t0 = GetTickMs();
@@ -226,6 +348,7 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
         e = L9963E_read_cell_voltage(&hl9963e, device_id, L9963E_CELL14, &voltage, &d_rdy);
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
+    if (e != L9963E_OK || !d_rdy) l9963_comm_errors++;
     vcells[module_id][10] = voltage;
 
     /******* READING TOTAL BATTERY VOLTAGES *******/
@@ -235,9 +358,12 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
             &hl9963e, device_id, ((uint16_t *)&(vtot[module_id])), ((uint32_t *)&(vsumbatt[module_id])));
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK);
+    if (e != L9963E_OK) l9963_comm_errors++;
 
-    if (!read_gpio)
+    if (!read_gpio) {
+        l9963_read_cycles++;
         return;
+    }
 
     /******* READING GPIO VOLTAGES *******/
     t0 = GetTickMs();
@@ -245,6 +371,7 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
         e = L9963E_read_gpio_voltage(&hl9963e, device_id, L9963E_GPIO3, &voltage, &d_rdy);
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
+    if (e != L9963E_OK || !d_rdy) l9963_comm_errors++;
     vgpio[module_id][0] = voltage;
 
     t0 = GetTickMs();
@@ -252,6 +379,7 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
         e = L9963E_read_gpio_voltage(&hl9963e, device_id, L9963E_GPIO4, &voltage, &d_rdy);
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
+    if (e != L9963E_OK || !d_rdy) l9963_comm_errors++;
     vgpio[module_id][1] = voltage;
 
     t0 = GetTickMs();
@@ -259,6 +387,7 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
         e = L9963E_read_gpio_voltage(&hl9963e, device_id, L9963E_GPIO5, &voltage, &d_rdy);
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
+    if (e != L9963E_OK || !d_rdy) l9963_comm_errors++;
     vgpio[module_id][2] = voltage;
 
     t0 = GetTickMs();
@@ -266,6 +395,7 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
         e = L9963E_read_gpio_voltage(&hl9963e, device_id, L9963E_GPIO6, &voltage, &d_rdy);
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
+    if (e != L9963E_OK || !d_rdy) l9963_comm_errors++;
     vgpio[module_id][3] = voltage;
 
     /* GPIO7 SALTATO: è collegato a GND da schematico, non è un NTC.
@@ -276,6 +406,7 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
         e = L9963E_read_gpio_voltage(&hl9963e, device_id, L9963E_GPIO8, &voltage, &d_rdy);
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
+    if (e != L9963E_OK || !d_rdy) l9963_comm_errors++;
     vgpio[module_id][4] = voltage;  // GPIO8 → NTC1
 
     t0 = GetTickMs();
@@ -283,9 +414,12 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
         e = L9963E_read_gpio_voltage(&hl9963e, device_id, L9963E_GPIO9, &voltage, &d_rdy);
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
+    if (e != L9963E_OK || !d_rdy) l9963_comm_errors++;
     vgpio[module_id][5] = voltage;  // GPIO9 → NTC2
 
     ntc_set_ext_data((uint16_t *)vgpio, N_GPIOS_PER_SLAVE, 0);  // N_GPIOS_PER_SLAVE=6
+    l9963_gpio_valid = 1;
+    l9963_read_cycles++;
 }
 
 void L9963E_utils_read_all_cells(uint8_t read_gpio){
