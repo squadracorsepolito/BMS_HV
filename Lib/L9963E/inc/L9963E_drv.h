@@ -49,6 +49,23 @@
 #define L9963E_DRV_GETTICK(HANDLE)      ((HANDLE)->interface.L9963E_IF_GetTickMs())
 #define L9963E_DRV_DELAY(HANDLE, DELAY) ((HANDLE)->interface.L9963E_IF_DelayMs((DELAY)))
 
+/* ---- Dual-ring: macro per rx_interface (TL, SPI2) ---- */
+#define L9963E_DRV_RX_WRITE_PIN(HANDLE, PIN, VAL) ((HANDLE)->rx_interface.L9963E_IF_GPIO_WritePin((PIN), (VAL)))
+#define L9963E_DRV_RX_READ_PIN(HANDLE, PIN)       ((HANDLE)->rx_interface.L9963E_IF_GPIO_ReadPin((PIN)))
+
+#define L9963E_DRV_RX_CS_HIGH(HANDLE) L9963E_DRV_RX_WRITE_PIN(HANDLE, L9963E_IF_CS, L9963E_IF_GPIO_PIN_SET)
+#define L9963E_DRV_RX_CS_LOW(HANDLE)  L9963E_DRV_RX_WRITE_PIN(HANDLE, L9963E_IF_CS, L9963E_IF_GPIO_PIN_RESET)
+
+#define L9963E_DRV_RX_TXEN_LOW(HANDLE) L9963E_DRV_RX_WRITE_PIN(HANDLE, L9963E_IF_TXEN, L9963E_IF_GPIO_PIN_RESET)
+
+#define L9963E_DRV_RX_ISOFREQ_HIGH(HANDLE) L9963E_DRV_RX_WRITE_PIN(HANDLE, L9963E_IF_ISOFREQ, L9963E_IF_GPIO_PIN_SET)
+#define L9963E_DRV_RX_ISOFREQ_LOW(HANDLE)  L9963E_DRV_RX_WRITE_PIN(HANDLE, L9963E_IF_ISOFREQ, L9963E_IF_GPIO_PIN_RESET)
+
+#define L9963E_DRV_RX_BNE_READ(HANDLE) L9963E_DRV_RX_READ_PIN(HANDLE, L9963E_IF_BNE)
+
+#define L9963E_DRV_RX_SPI_RECEIVE(HANDLE, DATA, SIZE, TIMEOUT_MS) \
+    ((HANDLE)->rx_interface.L9963E_IF_SPI_Receive((DATA), (SIZE), (TIMEOUT_MS)))
+
 #define L9963E_DEVICE_BROADCAST 0x0U
 
 union L9963E_DRV_FrameUnion {
@@ -60,18 +77,36 @@ union L9963E_DRV_FrameUnion {
 typedef union L9963E_DRV_FrameUnion L9963E_DRV_CmdTypeDef;
 
 struct L9963E_DRV_HandleStruct {
-    L9963E_IfTypeDef interface;
+    L9963E_IfTypeDef interface;      /* TX: TH (NSLAVE=0, SPI3) — comandi verso slave via ISO_H */
+    L9963E_IfTypeDef rx_interface;   /* RX: TL (NSLAVE=0, SPI2) — risposte slave via ISO_L (dual-ring) */
+    uint8_t is_dual_ring;            /* 0 = anello singolo (solo TH), 1 = doppio anello (TH TX + TL RX) */
 };
 typedef struct L9963E_DRV_HandleStruct L9963E_DRV_HandleTypeDef;
 
 /**
- * @brief     Initialize the handle 
- * 
+ * @brief     Initialize the handle (anello singolo — solo TH)
+ *
  * @param     handle Reference handle to be initialized
- * @param     interface Struct containing the abstraction interface
+ * @param     interface Struct containing the abstraction interface (TH, SPI3)
  * @return    L9963E_OK on success, L9963E_ERROR on failure
  */
 L9963E_StatusTypeDef L9963E_DRV_init(L9963E_DRV_HandleTypeDef *handle, L9963E_IfTypeDef interface);
+/**
+ * @brief     Initialize the handle in dual-ring mode (TH TX + TL RX)
+ *
+ *  Topologia doppio anello:
+ *    - tx_interface (TH, SPI3): comandi MCU→Slave via ISO_H→ISO_L
+ *    - rx_interface (TL, SPI2): risposte Slave via ISO_H→ISO_L del TL
+ *  Lo slave deve avere isotx_en_h=1 (impostato da L9963E_addressing_procedure).
+ *
+ * @param     handle        Reference handle to be initialized
+ * @param     tx_interface  TX interface (TH, SPI3)
+ * @param     rx_interface  RX interface (TL, SPI2)
+ * @return    L9963E_OK on success, L9963E_ERROR on failure
+ */
+L9963E_StatusTypeDef L9963E_DRV_init_dual_ring(L9963E_DRV_HandleTypeDef *handle,
+                                               L9963E_IfTypeDef tx_interface,
+                                               L9963E_IfTypeDef rx_interface);
 /**
  * @brief     Wakes up the IC 
  * 

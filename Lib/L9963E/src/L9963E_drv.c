@@ -88,12 +88,42 @@ L9963E_StatusTypeDef L9963E_DRV_init(L9963E_DRV_HandleTypeDef *handle, L9963E_If
     }
 #endif
 
-    handle->interface = interface;
+    handle->interface    = interface;
+    handle->is_dual_ring = 0;  /* anello singolo per default */
 
     L9963E_DRV_CS_HIGH(handle);
     L9963E_DRV_TXEN_HIGH(handle);
     L9963E_DRV_ISOFREQ_LOW(handle);
     L9963E_DRV_DIS_LOW(handle);
+
+    return L9963E_OK;
+}
+
+L9963E_StatusTypeDef L9963E_DRV_init_dual_ring(L9963E_DRV_HandleTypeDef *handle,
+                                               L9963E_IfTypeDef tx_interface,
+                                               L9963E_IfTypeDef rx_interface) {
+#if L9963E_DEBUG
+    if (handle == NULL)                          return L9963E_ERROR;
+    if (rx_interface.L9963E_IF_GPIO_ReadPin  == NULL) return L9963E_ERROR;
+    if (rx_interface.L9963E_IF_GPIO_WritePin == NULL) return L9963E_ERROR;
+    if (rx_interface.L9963E_IF_SPI_Receive   == NULL) return L9963E_ERROR;
+    if (rx_interface.L9963E_IF_GetTickMs     == NULL) return L9963E_ERROR;
+    if (rx_interface.L9963E_IF_DelayMs       == NULL) return L9963E_ERROR;
+#endif
+
+    /* Inizializza lato TX (TH) tramite L9963E_DRV_init → is_dual_ring=0 temporaneo */
+    L9963E_StatusTypeDef ret = L9963E_DRV_init(handle, tx_interface);
+    if (ret != L9963E_OK) return ret;
+
+    handle->rx_interface = rx_interface;
+    handle->is_dual_ring = 1;
+
+    /* Inizializza TL (rx_interface): NCS deasserted, TXEN=LOW (sempre in ricezione),
+     * ISOFREQ=LOW (slow mode, verrà aggiornato da addressing_procedure), DIS=LOW (attivo) */
+    L9963E_DRV_RX_CS_HIGH(handle);
+    L9963E_DRV_RX_TXEN_LOW(handle);      /* TL non trasmette mai su ISO_L */
+    L9963E_DRV_RX_ISOFREQ_LOW(handle);
+    L9963E_DRV_RX_WRITE_PIN(handle, L9963E_IF_DIS, L9963E_IF_GPIO_PIN_RESET); /* DIS=LOW: TL attivo */
 
     return L9963E_OK;
 }
@@ -160,8 +190,27 @@ L9963E_StatusTypeDef _L9963E_DRV_spi_transmit(L9963E_DRV_HandleTypeDef *handle,
     L9963E_DRV_TXEN_HIGH(handle);
     L9963E_DRV_CS_LOW(handle);
     errorcode = L9963E_DRV_SPI_TRANSMIT(handle, data, len, timeout);
-    L9963E_DRV_TXEN_LOW(handle);
-    L9963E_DRV_CS_HIGH(handle);
+    L9963E_DRV_CS_HIGH(handle);  /* Fine transazione SPI: TH ha ricevuto tutti i byte */
+
+    /* BUG FIX (CRITICO): CS_HIGH deve precedere qualsiasi cambio di TXEN e
+     * bisogna attendere che TH completi la trasmissione ISO prima del prossimo frame.
+     *
+     * SPI (5.6 MHz) completa 5 byte in ~7 µs; ISO (500 kbps) impiega ~80 µs per 40 bit.
+     * Se CS_HIGH arriva troppo tardi (vecchio codice: TXEN_LOW → CS_HIGH):
+     *   - TXEN_LOW cambia direzione TH mentre sta ancora trasmettendo su ISO
+     *   → TH interrompe ISO a metà → CRC invalido → slave ignora il frame
+     * Senza il delay: il frame SPI successivo arriva mentre TH trasmette ancora su ISO
+     * → TH abortisce il frame in corso → slave riceve dati corrotti.
+     * Con 1 ms (>> 80 µs @ 500 kbps) siamo sicuri per tutte le frequenze ISO. */
+    L9963E_DRV_DELAY(handle, 1);  /* Attende il completamento del frame ISO su TH */
+
+    if (!handle->is_dual_ring) {
+        /* Anello singolo: porta TH in modalità RX (TXEN=LOW) così
+         * la risposta della slave (stesso cavo ISO_H) può tornare indietro via TH MISO. */
+        L9963E_DRV_TXEN_LOW(handle);
+    }
+    /* Doppio anello: TH rimane TXEN=HIGH (solo TX); la risposta slave
+     * arriva via ISO_H della slave → ISO_L del TL → SPI2. */
 
     return errorcode;
 }
@@ -178,19 +227,36 @@ L9963E_StatusTypeDef _L9963E_DRV_wait_and_receive(union L9963E_DRV_FrameUnion *f
     frame->cmd.devid = -1;
     frame->cmd.data  = -1;
 
-    L9963E_DRV_TXEN_LOW(handle);
+    if (!handle->is_dual_ring) {
+        /* Anello singolo: porta TH in modalità RX (TXEN=LOW) per ricevere
+         * via ISO_H la risposta che arriva dallo stesso cavo. */
+        L9963E_DRV_TXEN_LOW(handle);
+    }
+    /* Dual-ring: TH rimane TXEN=HIGH (solo TX). TL è fisso TXEN=LOW (solo RX):
+     * la risposta slave arriva su ISO_H della slave → ISO_L del TL → SPI2. */
+
     while (frame->cmd.devid != device) {
-        while (L9963E_DRV_BNE_READ(handle) == L9963E_IF_GPIO_PIN_RESET) {
+        /* Poll BNE: dual-ring → TL BNE (rx_interface); singolo → TH BNE */
+        while ((handle->is_dual_ring ? L9963E_DRV_RX_BNE_READ(handle)
+                                     : L9963E_DRV_BNE_READ(handle)) == L9963E_IF_GPIO_PIN_RESET) {
             if (L9963E_DRV_GETTICK(handle) - current_tick >= timeout) {
-                L9963E_DRV_TXEN_HIGH(handle);
+                if (!handle->is_dual_ring) L9963E_DRV_TXEN_HIGH(handle);
                 return L9963E_TIMEOUT;
             }
         }
 
-        L9963E_DRV_CS_LOW(handle);
-        errorcode = L9963E_DRV_SPI_RECEIVE(handle, raw, 5, 10);
-        L9963E_DRV_CS_HIGH(handle);
-        L9963E_DRV_TXEN_HIGH(handle);
+        if (handle->is_dual_ring) {
+            /* Leggi frame via TL (SPI2) */
+            L9963E_DRV_RX_CS_LOW(handle);
+            errorcode = L9963E_DRV_RX_SPI_RECEIVE(handle, raw, 5, 10);
+            L9963E_DRV_RX_CS_HIGH(handle);
+        } else {
+            /* Leggi frame via TH (SPI3) */
+            L9963E_DRV_CS_LOW(handle);
+            errorcode = L9963E_DRV_SPI_RECEIVE(handle, raw, 5, 10);
+            L9963E_DRV_CS_HIGH(handle);
+            L9963E_DRV_TXEN_HIGH(handle);
+        }
 
         if (errorcode != L9963E_OK) {
             return errorcode;
@@ -280,6 +346,13 @@ L9963E_StatusTypeDef _L9963E_DRV_reg_cmd(L9963E_DRV_HandleTypeDef *handle,
         return errorcode;
     }
 
+    /* Per una write broadcast (device=0) lo slave risponde con il proprio chip_ID,
+     * non con 0. La wait_and_receive cercherebbe devid==0 e andrebbe sempre in
+     * timeout. Saltiamo il readback: i dati sono stati inviati in broadcast. */
+    if (is_write && device == L9963E_DEVICE_BROADCAST) {
+        return L9963E_OK;
+    }
+
     errorcode = _L9963E_DRV_wait_and_receive(&frame, handle, device, L9963E_DRV_GETTICK(handle), timeout);
 
     if (errorcode != L9963E_OK) {
@@ -323,8 +396,8 @@ L9963E_StatusTypeDef L9963E_DRV_trans_sleep(L9963E_DRV_HandleTypeDef *handle) {
         return L9963E_ERROR;
     }
 #endif
-
-    return L9963E_DRV_DIS_LOW(handle);
+    /* DIS=HIGH → L9963T enters low-power/standby mode (L9963T DS Table 1) */
+    return L9963E_DRV_DIS_HIGH(handle);
 }
 
 L9963E_StatusTypeDef L9963E_DRV_trans_wakeup(L9963E_DRV_HandleTypeDef *handle) {
@@ -333,8 +406,8 @@ L9963E_StatusTypeDef L9963E_DRV_trans_wakeup(L9963E_DRV_HandleTypeDef *handle) {
         return L9963E_ERROR;
     }
 #endif
-
-    return L9963E_DRV_DIS_HIGH(handle);
+    /* DIS=LOW → L9963T enters Normal mode / active (L9963T DS Table 1) */
+    return L9963E_DRV_DIS_LOW(handle);
 }
 
 L9963E_IF_PinState L9963E_DRV_trans_is_sleeping(L9963E_DRV_HandleTypeDef *handle) {
