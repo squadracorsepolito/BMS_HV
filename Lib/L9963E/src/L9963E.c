@@ -92,7 +92,9 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
     L9963E_DRV_reg_write(&(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
 
     write_reg.DEV_GEN_CFG.Farthest_Unit = 0b1;
-    if (!handle->is_dual_ring) {
+    /* Single ring (is_dual_ring=0): il chip farthest risponde via ISO_H → serve isotx_en_h=1.
+     * Dual ring   (is_dual_ring=1): il chip farthest risponde via ISO_L → ISO_H TX non serve. */
+    if (handle->is_dual_ring) {
         write_reg.DEV_GEN_CFG.isotx_en_h = 0;
     }
 
