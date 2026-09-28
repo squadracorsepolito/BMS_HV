@@ -88,12 +88,42 @@ L9963E_StatusTypeDef L9963E_DRV_init(L9963E_DRV_HandleTypeDef *handle, L9963E_If
     }
 #endif
 
-    handle->interface = interface;
+    handle->interface    = interface;
+    handle->is_dual_ring = 0;  /* anello singolo per default */
 
     L9963E_DRV_CS_HIGH(handle);
     L9963E_DRV_TXEN_HIGH(handle);
     L9963E_DRV_ISOFREQ_LOW(handle);
     L9963E_DRV_DIS_LOW(handle);
+
+    return L9963E_OK;
+}
+
+L9963E_StatusTypeDef L9963E_DRV_init_dual_ring(L9963E_DRV_HandleTypeDef *handle,
+                                               L9963E_IfTypeDef tx_interface,
+                                               L9963E_IfTypeDef rx_interface) {
+#if L9963E_DEBUG
+    if (handle == NULL)                          return L9963E_ERROR;
+    if (rx_interface.L9963E_IF_GPIO_ReadPin  == NULL) return L9963E_ERROR;
+    if (rx_interface.L9963E_IF_GPIO_WritePin == NULL) return L9963E_ERROR;
+    if (rx_interface.L9963E_IF_SPI_Receive   == NULL) return L9963E_ERROR;
+    if (rx_interface.L9963E_IF_GetTickMs     == NULL) return L9963E_ERROR;
+    if (rx_interface.L9963E_IF_DelayMs       == NULL) return L9963E_ERROR;
+#endif
+
+    /* Inizializza lato TX (TH) tramite L9963E_DRV_init → is_dual_ring=0 temporaneo */
+    L9963E_StatusTypeDef ret = L9963E_DRV_init(handle, tx_interface);
+    if (ret != L9963E_OK) return ret;
+
+    handle->rx_interface = rx_interface;
+    handle->is_dual_ring = 1;
+
+    /* Inizializza TL (rx_interface): NCS deasserted, TXEN=LOW (sempre in ricezione),
+     * ISOFREQ=LOW (slow mode, verrà aggiornato da addressing_procedure), DIS=LOW (attivo) */
+    L9963E_DRV_RX_CS_HIGH(handle);
+    L9963E_DRV_RX_TXEN_LOW(handle);      /* TL non trasmette mai su ISO_L */
+    L9963E_DRV_RX_ISOFREQ_LOW(handle);
+    L9963E_DRV_RX_WRITE_PIN(handle, L9963E_IF_DIS, L9963E_IF_GPIO_PIN_RESET); /* DIS=LOW: TL attivo */
 
     return L9963E_OK;
 }
@@ -160,7 +190,12 @@ L9963E_StatusTypeDef _L9963E_DRV_spi_transmit(L9963E_DRV_HandleTypeDef *handle,
     L9963E_DRV_TXEN_HIGH(handle);
     L9963E_DRV_CS_LOW(handle);
     errorcode = L9963E_DRV_SPI_TRANSMIT(handle, data, len, timeout);
-    L9963E_DRV_TXEN_LOW(handle);
+    if (!handle->is_dual_ring) {
+        /* Anello singolo: dopo TX porta TH in modalità RX (TXEN=LOW) così
+         * la risposta della slave (stessa coppia di fili) può tornare indietro.
+         * Dual-ring: TH rimane TXEN=HIGH (solo TX); la risposta arriva via TL. */
+        L9963E_DRV_TXEN_LOW(handle);
+    }
     L9963E_DRV_CS_HIGH(handle);
 
     return errorcode;
@@ -178,19 +213,36 @@ L9963E_StatusTypeDef _L9963E_DRV_wait_and_receive(union L9963E_DRV_FrameUnion *f
     frame->cmd.devid = -1;
     frame->cmd.data  = -1;
 
-    L9963E_DRV_TXEN_LOW(handle);
+    if (!handle->is_dual_ring) {
+        /* Anello singolo: porta TH in modalità RX (TXEN=LOW) per ricevere
+         * via ISO_H la risposta che arriva dallo stesso cavo. */
+        L9963E_DRV_TXEN_LOW(handle);
+    }
+    /* Dual-ring: TH rimane TXEN=HIGH (solo TX). TL è fisso TXEN=LOW (solo RX):
+     * la risposta slave arriva su ISO_H della slave → ISO_L del TL → SPI2. */
+
     while (frame->cmd.devid != device) {
-        while (L9963E_DRV_BNE_READ(handle) == L9963E_IF_GPIO_PIN_RESET) {
+        /* Poll BNE: dual-ring → TL BNE (rx_interface); singolo → TH BNE */
+        while ((handle->is_dual_ring ? L9963E_DRV_RX_BNE_READ(handle)
+                                     : L9963E_DRV_BNE_READ(handle)) == L9963E_IF_GPIO_PIN_RESET) {
             if (L9963E_DRV_GETTICK(handle) - current_tick >= timeout) {
-                L9963E_DRV_TXEN_HIGH(handle);
+                if (!handle->is_dual_ring) L9963E_DRV_TXEN_HIGH(handle);
                 return L9963E_TIMEOUT;
             }
         }
 
-        L9963E_DRV_CS_LOW(handle);
-        errorcode = L9963E_DRV_SPI_RECEIVE(handle, raw, 5, 10);
-        L9963E_DRV_CS_HIGH(handle);
-        L9963E_DRV_TXEN_HIGH(handle);
+        if (handle->is_dual_ring) {
+            /* Leggi frame via TL (SPI2) */
+            L9963E_DRV_RX_CS_LOW(handle);
+            errorcode = L9963E_DRV_RX_SPI_RECEIVE(handle, raw, 5, 10);
+            L9963E_DRV_RX_CS_HIGH(handle);
+        } else {
+            /* Leggi frame via TH (SPI3) */
+            L9963E_DRV_CS_LOW(handle);
+            errorcode = L9963E_DRV_SPI_RECEIVE(handle, raw, 5, 10);
+            L9963E_DRV_CS_HIGH(handle);
+            L9963E_DRV_TXEN_HIGH(handle);
+        }
 
         if (errorcode != L9963E_OK) {
             return errorcode;

@@ -24,18 +24,20 @@ const L9963E_IfTypeDef interface_L = {.L9963E_IF_DelayMs       = DelayMs,
                                       .L9963E_IF_SPI_Receive   = L9963TL_SPI_Receive,
                                       .L9963E_IF_SPI_Transmit  = L9963TL_SPI_Transmit};
 
-// TRYING TO FIGURE OUT HOW TO INITIALIZE THE DRIVER HANDLE
 void L9963E_utils_init(void) {
-    L9963E_init(&hl9963e, interface_H, N_SLAVES);
-    /* is_dual_ring=0: anello singolo, solo lato H (L9963TH).
-     * isotx_en_h=0: slave risponde via ISO_L → stesso cavo → L9963TH riceve. */
+    /* Doppio anello: TH (SPI3) per TX dei comandi, TL (SPI2) per RX delle risposte.
+     * TH: ISO_H → Slave ISO_L (comandi)
+     * TL: Slave ISO_H → TL ISO_L → SPI2 (risposte, isotx_en_h=1 nello slave)
+     * Entrambi i transceiver sono NSLAVE=0 (SPI Slave mode), STM32 è SPI Master. */
+    L9963E_init_dual_ring(&hl9963e, interface_H, interface_L, N_SLAVES);
 
     /* Retry fino a 3 volte: al primo tentativo il t_SHUT potrebbe essere già scaduto
      * se c'è latenza tra wakeup e broadcast; il retry rimanda un wakeup fresco. */
     {
         L9963E_StatusTypeDef addr_ret = L9963E_TIMEOUT;
         for (uint8_t _attempt = 0; _attempt < 3U && addr_ret != L9963E_OK; ++_attempt) {
-            addr_ret = L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1);
+            /* is_dual_ring=1: isotx_en_h=1 nello slave, risposta via ISO_H→TL */
+            addr_ret = L9963E_addressing_procedure(&hl9963e, 0b11, 1, 0, 1);
         }
         /* Se addr_ret != L9963E_OK dopo 3 tentativi: Farthest_Unit NON è stato settato,
          * le letture unicast falliranno tutte. Verificare: cavo ISOHp/ISOHm→ISOLp/ISOLm,
