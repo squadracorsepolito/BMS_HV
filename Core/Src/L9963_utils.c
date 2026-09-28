@@ -34,9 +34,12 @@ void L9963E_utils_init(void) {
         to write to all chips at once **/
 
     // Configuring GPIOs
+    // GPIO3,4,5,6,8,9 → analog (NTC input, CONFIG=0)
+    // GPIO7            → digital input (CONFIG=1): è collegato a GND da schematico,
+    //                    non è un NTC; lo escludiamo dalle conversioni analogiche
     L9963E_RegisterUnionTypeDef gpio9_3_conf_reg = {.generic = L9963E_GPIO9_3_CONF_DEFAULT};
-    gpio9_3_conf_reg.GPIO9_3_CONF.GPIO7_CONFIG   = 0;
-    gpio9_3_conf_reg.GPIO9_3_CONF.GPIO8_CONFIG   = 0;
+    gpio9_3_conf_reg.GPIO9_3_CONF.GPIO7_CONFIG   = 1;  // digital: GPIO7 a GND, non NTC
+    gpio9_3_conf_reg.GPIO9_3_CONF.GPIO8_CONFIG   = 0;  // analog: NTC1
     L9963E_DRV_reg_write(
         &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_GPIO9_3_CONF_ADDR, &gpio9_3_conf_reg, 10);
 
@@ -245,28 +248,24 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
     } while (e != L9963E_OK || !d_rdy);
     vgpio[module_id][3] = voltage;
 
-    t0 = GetTickMs();
-    do {
-        e = L9963E_read_gpio_voltage(&hl9963e, device_id, L9963E_GPIO7, &voltage, &d_rdy);
-        if (GetTickMs() - t0 > 500U) break;
-    } while (e != L9963E_OK || !d_rdy);
-    vgpio[module_id][4] = voltage;
-
+    /* GPIO7 SALTATO: è collegato a GND da schematico, non è un NTC.
+     * vgpio index map: 0=GPIO3(NTC3), 1=GPIO4(NTC4), 2=GPIO5(NTC5),
+     *                  3=GPIO6(NTC6), 4=GPIO8(NTC1), 5=GPIO9(NTC2) */
     t0 = GetTickMs();
     do {
         e = L9963E_read_gpio_voltage(&hl9963e, device_id, L9963E_GPIO8, &voltage, &d_rdy);
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
-    vgpio[module_id][5] = voltage;
+    vgpio[module_id][4] = voltage;  // GPIO8 → NTC1
 
     t0 = GetTickMs();
     do {
         e = L9963E_read_gpio_voltage(&hl9963e, device_id, L9963E_GPIO9, &voltage, &d_rdy);
         if (GetTickMs() - t0 > 500U) break;
     } while (e != L9963E_OK || !d_rdy);
-    vgpio[module_id][6] = voltage;
+    vgpio[module_id][5] = voltage;  // GPIO9 → NTC2
 
-    ntc_set_ext_data((uint16_t *)vgpio, N_GPIOS_PER_SLAVE, 0);
+    ntc_set_ext_data((uint16_t *)vgpio, N_GPIOS_PER_SLAVE, 0);  // N_GPIOS_PER_SLAVE=6
 }
 
 void L9963E_utils_read_all_cells(uint8_t read_gpio){
