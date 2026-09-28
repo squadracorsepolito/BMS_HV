@@ -141,13 +141,25 @@ L9963E_StatusTypeDef L9963E_DRV_wakeup(L9963E_DRV_HandleTypeDef *handle) {
 
     isofreq = L9963E_DRV_ISOFREQ_READ(handle);
 
+    /* Il wakeup va inviato in bassa frequenza e con TX abilitato.
+     * L9963T campiona TXEN e ISOFREQ sul fronte di discesa di NCS e li vuole stabili
+     * per TRC_DELAY (700 ns) + T_DEGLITCH (687.5 ns) ≈ 1.4 us prima (DS L9963T Tab. 11):
+     * 1 ms di attesa copre ampiamente questo vincolo. */
     L9963E_DRV_ISOFREQ_LOW(handle);
+    L9963E_DRV_TXEN_HIGH(handle);
+    L9963E_DRV_DELAY(handle, 1);
 
     L9963E_DRV_CS_LOW(handle);
     errorcode = L9963E_DRV_SPI_TRANSMIT(handle, (uint8_t *)dummy, sizeof(dummy), 10);
     L9963E_DRV_CS_HIGH(handle);
 
+    /* Ripristina subito i pin (sono già stati campionati sul fronte di NCS↓) e poi attende:
+     * così restano stabili >1.4 us prima del prossimo NCS↓. */
     L9963E_DRV_WRITE_PIN(handle, L9963E_IF_ISOFREQ, isofreq);
+    if (!handle->is_dual_ring) {
+        L9963E_DRV_TXEN_LOW(handle); /* anello singolo: TXEN a riposo LOW */
+    }
+    L9963E_DRV_DELAY(handle, 1);
 
     return errorcode;
 }
@@ -187,30 +199,37 @@ L9963E_StatusTypeDef _L9963E_DRV_spi_transmit(L9963E_DRV_HandleTypeDef *handle,
                                               uint8_t timeout) {
     L9963E_StatusTypeDef errorcode = L9963E_OK;
 
-    L9963E_DRV_TXEN_HIGH(handle);
+    /* Semantica TXEN (DS L9963T §3.2.1.6, NSLAVE=0):
+     *  - TXEN viene CAMPIONATO sul fronte di DISCESA di NCS.
+     *  - TXEN=1 → il frame SPI entra nella TX queue e viene trasmesso su ISO.
+     *  - TXEN=0 → i dati su SDI sono scartati (si usa per leggere la RX queue).
+     *  - TXEN (e ISOFREQ) devono essere stabili per ≈1.4 us PRIMA di NCS↓
+     *    (TRC_DELAY 700 ns + TTXEN_DEGLITCH 687.5 ns), e TTXEN_HOLD = 300 ns dopo.
+     * Anello singolo: TXEN a riposo è LOW → va alzato e bisogna ATTENDERE prima di NCS↓,
+     * altrimenti il TH campiona TXEN=0 e il comando viene scartato in silenzio.
+     * Il delay copre anche il setup di ISOFREQ quando addressing_procedure lo cambia. */
+    if (!handle->is_dual_ring) {
+        L9963E_DRV_TXEN_HIGH(handle);
+    }
+    L9963E_DRV_DELAY(handle, 1);
+
     L9963E_DRV_CS_LOW(handle);
     errorcode = L9963E_DRV_SPI_TRANSMIT(handle, data, len, timeout);
-    L9963E_DRV_CS_HIGH(handle);  /* Fine transazione SPI: TH ha ricevuto tutti i byte */
-
-    /* BUG FIX (CRITICO): CS_HIGH deve precedere qualsiasi cambio di TXEN e
-     * bisogna attendere che TH completi la trasmissione ISO prima del prossimo frame.
-     *
-     * SPI (5.6 MHz) completa 5 byte in ~7 µs; ISO (500 kbps) impiega ~80 µs per 40 bit.
-     * Se CS_HIGH arriva troppo tardi (vecchio codice: TXEN_LOW → CS_HIGH):
-     *   - TXEN_LOW cambia direzione TH mentre sta ancora trasmettendo su ISO
-     *   → TH interrompe ISO a metà → CRC invalido → slave ignora il frame
-     * Senza il delay: il frame SPI successivo arriva mentre TH trasmette ancora su ISO
-     * → TH abortisce il frame in corso → slave riceve dati corrotti.
-     * Con 1 ms (>> 80 µs @ 500 kbps) siamo sicuri per tutte le frequenze ISO. */
-    L9963E_DRV_DELAY(handle, 1);  /* Attende il completamento del frame ISO su TH */
+    L9963E_DRV_CS_HIGH(handle);
 
     if (!handle->is_dual_ring) {
-        /* Anello singolo: porta TH in modalità RX (TXEN=LOW) così
-         * la risposta della slave (stesso cavo ISO_H) può tornare indietro via TH MISO. */
+        /* Anello singolo: TXEN torna LOW SUBITO (TTXEN_HOLD=300 ns dopo NCS↓ è già rispettato:
+         * l'SPI è durato ~7 us). Così durante l'attesa qui sotto TXEN resta LOW stabile per 1 ms
+         * e la successiva lettura della RX queue (NCS↓, byte dummy su MOSI) viene campionata con
+         * TXEN=0 → i byte dummy sono scartati e NON escono sull'ISO. */
         L9963E_DRV_TXEN_LOW(handle);
     }
-    /* Doppio anello: TH rimane TXEN=HIGH (solo TX); la risposta slave
-     * arriva via ISO_H della slave → ISO_L del TL → SPI2. */
+    /* Doppio anello: TH resta TXEN=HIGH (solo TX), le risposte si leggono dal TL. */
+
+    /* SPI 5.6 MHz → 5 byte in ~7 us; ISO lento (333 kbps) → 40 bit in ~120 us.
+     * 1 ms: il frame esce sull'ISO, la risposta ha tempo di arrivare e TXEN/ISOFREQ
+     * sono stabili ben oltre gli 1.4 us richiesti prima del prossimo NCS↓. */
+    L9963E_DRV_DELAY(handle, 1);
 
     return errorcode;
 }
@@ -228,20 +247,23 @@ L9963E_StatusTypeDef _L9963E_DRV_wait_and_receive(union L9963E_DRV_FrameUnion *f
     frame->cmd.data  = -1;
 
     if (!handle->is_dual_ring) {
-        /* Anello singolo: porta TH in modalità RX (TXEN=LOW) per ricevere
-         * via ISO_H la risposta che arriva dallo stesso cavo. */
+        /* Anello singolo: TXEN deve essere LOW durante la lettura della RX queue del TH,
+         * così i byte dummy su MOSI vengono scartati (già LOW da spi_transmit, qui per sicurezza). */
         L9963E_DRV_TXEN_LOW(handle);
     }
     /* Dual-ring: TH rimane TXEN=HIGH (solo TX). TL è fisso TXEN=LOW (solo RX):
      * la risposta slave arriva su ISO_H della slave → ISO_L del TL → SPI2. */
 
-    while (frame->cmd.devid != device) {
+    /* Accetta solo frame di RISPOSTA (P.A.=0, DS L9963E Tab. 20) del device atteso.
+     * In doppio anello il TL riceve anche i COMANDI (P.A.=1) ripetuti dalle slave verso l'alto:
+     * senza il controllo su pa un comando di lettura (stesso devid) verrebbe preso per risposta. */
+    frame->cmd.pa = 1;
+    while (frame->cmd.devid != device || frame->cmd.pa != 0) {
         /* Poll BNE: dual-ring → TL BNE (rx_interface); singolo → TH BNE */
         while ((handle->is_dual_ring ? L9963E_DRV_RX_BNE_READ(handle)
                                      : L9963E_DRV_BNE_READ(handle)) == L9963E_IF_GPIO_PIN_RESET) {
             if (L9963E_DRV_GETTICK(handle) - current_tick >= timeout) {
-                if (!handle->is_dual_ring) L9963E_DRV_TXEN_HIGH(handle);
-                return L9963E_TIMEOUT;
+                return L9963E_TIMEOUT; /* TXEN resta LOW (riposo anello singolo) */
             }
         }
 
@@ -252,10 +274,11 @@ L9963E_StatusTypeDef _L9963E_DRV_wait_and_receive(union L9963E_DRV_FrameUnion *f
             L9963E_DRV_RX_CS_HIGH(handle);
         } else {
             /* Leggi frame via TH (SPI3) */
+            /* TXEN resta LOW anche fra frame successivi: se ci sono più frame in coda
+             * (es. risposta vecchia), la lettura successiva non deve trasmettere nulla. */
             L9963E_DRV_CS_LOW(handle);
             errorcode = L9963E_DRV_SPI_RECEIVE(handle, raw, 5, 10);
             L9963E_DRV_CS_HIGH(handle);
-            L9963E_DRV_TXEN_HIGH(handle);
         }
 
         if (errorcode != L9963E_OK) {

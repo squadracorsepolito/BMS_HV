@@ -14,5 +14,6 @@ float ntc_get_ext_resistance(uint8_t index);
 float ntc_get_int_resistance(uint8_t index);
 float ntc_get_ext_temp(uint8_t index);
 float ntc_get_int_temp(uint8_t index);
+float ntc_raw_to_temp(uint16_t raw);
 
 #endif  // NTC_H

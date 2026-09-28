@@ -36,6 +36,7 @@
 #include "ntc.h"
 #include "timebase.h"
 #include "timer_utils.h"
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -114,6 +115,7 @@ int main(void)
   HAL_Delay(50);
 
   /* USER CODE BEGIN Init */
+    setvbuf(stdout, NULL, _IONBF, 0); /* printf senza buffer → esce subito su USART3 */
     L9963E_utils_init();
 
     data_reading_timebase_init();
@@ -128,6 +130,7 @@ int main(void)
     if (FSM_start(&hfsm) != STMLIBS_OK) {
         error_code = 2;
     }
+    printf("[4] FSM avviata, stato iniziale = %lu (0 = active_idle)\r\n", (unsigned long)FSM_get_state(&hfsm));
     if (FSM_get_state(&hfsm) == FSM_BMS_HV_active_idle){
       // If first state is active idle then we good
       Warn_LED_On();
@@ -139,9 +142,23 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+    uint32_t last_debug_print = 0;
+    uint32_t last_fsm_state   = 0xFFFFFFFFU;
     while (1) {
       data_reading_timebase_routine();
       FSM_routine(&hfsm);
+
+      /* Debug da terminale: cambi di stato FSM subito, misure ogni 2 s */
+      uint32_t st = (uint32_t)FSM_get_state(&hfsm);
+      if (st != last_fsm_state) {
+        printf("[FSM] stato -> %lu%s\r\n", (unsigned long)st,
+               st == FSM_BMS_HV_ams_imd_error ? " (ams_imd_error)" : (st == FSM_BMS_HV_active_idle ? " (active_idle)" : ""));
+        last_fsm_state = st;
+      }
+      if (HAL_GetTick() - last_debug_print >= 2000U) {
+        last_debug_print = HAL_GetTick();
+        L9963E_utils_debug_print();
+      }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

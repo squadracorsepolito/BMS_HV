@@ -92,10 +92,11 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
             write_reg.generic                  = L9963E_DEV_GEN_CFG_DEFAULT;
             write_reg.DEV_GEN_CFG.chip_ID      = x;
             write_reg.DEV_GEN_CFG.iso_freq_sel = 0b00;
-            /* isotx_en_h:
-             *   0 = slave risponde via ISO_L → stesso cavo → TH (anello singolo)
-             *   1 = slave risponde via ISO_H → TL ISO_L → SPI2 (doppio anello) */
-            write_reg.DEV_GEN_CFG.isotx_en_h   = is_dual_ring ? 0b1 : 0b0;
+            /* isotx_en_h=1 durante l'addressing (algoritmo DS L9963E §4.1.2.2):
+             * serve a far proseguire i frame verso la slave successiva (x+1).
+             * In anello singolo l'ULTIMA slave viene poi messa a isotx_en_h=0
+             * con la unicast finale (insieme a Farthest_Unit=1). */
+            write_reg.DEV_GEN_CFG.isotx_en_h   = 0b1;
 
             L9963E_DRV_reg_write(
                 &(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
@@ -108,6 +109,7 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
              * Così al prossimo giro il reg_read ha successo → ++x → loop esce. */
             if (x == handle->slave_n && !is_dual_ring) {
                 write_reg.DEV_GEN_CFG.Farthest_Unit = 0b1;
+                write_reg.DEV_GEN_CFG.isotx_en_h    = 0b0; /* ultima slave: porta H spenta */
                 L9963E_DRV_reg_write(
                     &(handle->drv_handle), x, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
             }
@@ -115,10 +117,9 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
     }
 
     write_reg.generic                    = L9963E_DEV_GEN_CFG_DEFAULT;
-    /* isotx_en_h broadcast finale:
-     *   0 → slave risponde via ISO_L (anello singolo, half-duplex TH)
-     *   1 → slave risponde via ISO_H → TL ISO_L (doppio anello) */
-    write_reg.DEV_GEN_CFG.isotx_en_h     = is_dual_ring ? 0b1 : 0b0;
+    /* Broadcast finale con isotx_en_h=1 (tutte le slave inoltrano verso l'alto).
+     * In anello singolo la unicast successiva spegne la porta H dell'ultima slave. */
+    write_reg.DEV_GEN_CFG.isotx_en_h     = 0b1;
     write_reg.DEV_GEN_CFG.out_res_tx_iso = out_res_tx_iso;
     write_reg.DEV_GEN_CFG.iso_freq_sel   = iso_freq_sel;
 
@@ -130,6 +131,18 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
         if (is_dual_ring) L9963E_DRV_RX_ISOFREQ_LOW(&(handle->drv_handle));
     }
 
+    if (is_dual_ring) {
+        /* L9963T campiona ISOFREQ solo sul fronte di discesa di NCS (DS L9963T Tab. 9).
+         * Il TL viene selezionato solo quando leggiamo: senza questo NCS "a vuoto" resterebbe
+         * in RX lenta e perderebbe la prima risposta veloce. Con TXEN(TL)=0 i byte su MOSI
+         * sono scartati; l'eventuale frame vecchio in coda viene letto e buttato. */
+        uint8_t dummy[5] = {0};
+        L9963E_DRV_DELAY(&(handle->drv_handle), 1); /* setup ISOFREQ > 1.4 us */
+        L9963E_DRV_RX_CS_LOW(&(handle->drv_handle));
+        (void)L9963E_DRV_RX_SPI_RECEIVE(&(handle->drv_handle), dummy, 5, 10);
+        L9963E_DRV_RX_CS_HIGH(&(handle->drv_handle));
+    }
+
     L9963E_DRV_reg_write(&(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
 
     /* Unicast Farthest_Unit → solo in anello singolo.
@@ -138,7 +151,7 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
     if (!is_dual_ring) {
         write_reg.DEV_GEN_CFG.chip_ID       = handle->slave_n;
         write_reg.DEV_GEN_CFG.Farthest_Unit = 0b1;
-        /* isotx_en_h resta 0: risponde via ISO_L → TH (già nel write_reg sopra) */
+        write_reg.DEV_GEN_CFG.isotx_en_h    = 0b0; /* ultima slave: risponde solo via ISO_L → TH */
         L9963E_DRV_reg_write(&(handle->drv_handle), handle->slave_n, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
     }
 
