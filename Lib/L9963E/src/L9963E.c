@@ -122,6 +122,19 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
             write_reg.generic                  = L9963E_DEV_GEN_CFG_DEFAULT;
             write_reg.DEV_GEN_CFG.chip_ID      = x;
             write_reg.DEV_GEN_CFG.iso_freq_sel = 0b00;
+            /* BUG FIX IMPORTANTE (ampiezza del segnale nel verso slave→master).
+             * out_res_tx_iso imposta l'ampiezza del TRASMETTITORE DELLA SLAVE, cioè la
+             * direzione slave→master: è il segnale che il master deve riuscire a leggere.
+             * Il suo valore di RESET è 0b00 = 440 Ohm (DS L9963E Tab. 18) = ampiezza MINIMA.
+             * Prima veniva scritto solo nel broadcast FINALE, dopo la fine dell'addressing:
+             * quindi tutte le risposte durante l'addressing — comprese quelle su cui si basa
+             * il readback che fa avanzare il ciclo — uscivano al minimo di ampiezza.
+             * Con VDIFF_ISO_IN del ricevitore fino a 320 mV (DS L9963T Tab. 24) il margine
+             * era quasi nullo. Lo impostiamo subito, dal primo broadcast.
+             * In Init state out_res_tx_iso non è tra i campi scrivibili (DS §4.1.2: solo
+             * chip_ID, isotx_en_h, iso_freq_sel), ma la slave passa a Normal nello stesso
+             * frame che le assegna il chip_ID, quindi il valore viene applicato lì. */
+            write_reg.DEV_GEN_CFG.out_res_tx_iso = out_res_tx_iso;
             /* isotx_en_h=1 durante l'addressing (algoritmo DS L9963E §4.1.2.2):
              * serve a far proseguire i frame verso la slave successiva (x+1).
              * In anello singolo l'ULTIMA slave viene poi messa a isotx_en_h=0
