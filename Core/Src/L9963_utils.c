@@ -560,24 +560,46 @@ void L9963E_utils_diag_loop(uint32_t max_cycles) {
     L9963E_DRV_HandleTypeDef *d = &(hl9963e.drv_handle);
     uint32_t ok_count = 0, crc_count = 0, none_count = 0;
 
-    /* Init del solo TH, senza addressing: la slave resta in ISO lenta (default) */
+    uint32_t ok_slow = 0, ok_fast = 0;
+
+    /* Init del solo TH, senza addressing */
     L9963E_init(&hl9963e, interface_H, 1);
+    /* TWAKEUP del TH = 1,06 ms max (DS L9963T Tab. 17): prima di toccare ISOFREQ bisogna
+     * aspettare che il transceiver sia in Normal state (DS L9963T Tab. 9). */
+    DelayMs(5);
     d->is_dual_ring = 0;
-    printf("\r\n=== DIAGNOSI ISO (anello singolo, ISO lenta): wakeup + addressing + lettura, ogni 200 ms ===\r\n");
-    printf("Pin TH: DIS=%d (deve essere 0)  ISOFREQ=%d (deve essere 0)\r\n",
-           (int)L9963E_DRV_DIS_READ(d), (int)L9963E_DRV_ISOFREQ_READ(d));
+    printf("\r\n=== DIAGNOSI ISO (anello singolo): wakeup + addressing + lettura, ogni 200 ms ===\r\n");
+    printf("Alterna ISO LENTA (333 kbps) e ISO VELOCE (2,66 Mbps) a cicli alterni:\r\n");
+    printf("  - risponde solo in LENTA  -> normale, e' la configurazione di default\r\n");
+    printf("  - risponde solo in VELOCE -> la slave e' rimasta bloccata in veloce da una\r\n");
+    printf("    sessione precedente (Lock_isoh_isofreq): stacca le celle per 10 s e riprova\r\n");
+    printf("  - non risponde in nessuna delle due -> problema fisico sulla linea ISO\r\n");
+    printf("Pin TH: DIS=%d (deve essere 0)\r\n", (int)L9963E_DRV_DIS_READ(d));
 
     for (uint32_t n = 1; max_cycles == 0 || n <= max_cycles; ++n) {
         L9963E_RegisterUnionTypeDef w = {.generic = L9963E_DEV_GEN_CFG_DEFAULT};
         uint8_t tx[5], rx[5] = {0}, got = 0;
         union L9963E_DRV_FrameUnion f = {.val = 0};
+        /* Cicli pari: ISO lenta. Cicli dispari: ISO veloce. Cosi' una sola sessione di
+         * diagnosi copre entrambi i casi senza dover riflashare. */
+        uint8_t use_fast = (n & 1U) == 0U;
 
         Warn_LED_On();
-        L9963E_DRV_ISOFREQ_LOW(d);
+        if (use_fast) {
+            L9963E_DRV_ISOFREQ_HIGH(d);
+        } else {
+            L9963E_DRV_ISOFREQ_LOW(d);
+        }
+        /* Il nuovo bit-rate e' applicato al TX solo DOPO il frame gia' accodato (DS L9963T
+         * Tab. 9): L9963E_DRV_wakeup manda due burst proprio per questo, il secondo esce
+         * alla frequenza appena impostata. */
         L9963E_DRV_wakeup(d);
-        DelayMs(3);
+        /* 15 ms: DS L9963E Tab. 11 -> TWAKEUP 2 ms e' il MASSIMO, ma timeout_VCOM_UP_first
+         * e' 8 ms e timeout_OSCI_MAIN e' 10 ms. Con 3 ms il broadcast partiva troppo presto. */
+        DelayMs(15);
 
-        w.DEV_GEN_CFG.chip_ID = 1;
+        w.DEV_GEN_CFG.chip_ID      = 1;
+        w.DEV_GEN_CFG.iso_freq_sel = use_fast ? 0b11 : 0b00;
         L9963E_DRV_reg_write(d, L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &w, 10);
 
         /* svuota eventuali frame vecchi nella RX del TH */
@@ -599,19 +621,39 @@ void L9963E_utils_diag_loop(uint32_t max_cycles) {
         }
         Warn_LED_Off();
 
+        const char *fr = use_fast ? "VELOCE" : "lenta ";
+
         if (!got) {
             none_count++;
             Stat2_LED_Off();
-            printf("[%lu] nessuna risposta (BNE mai alto)            ok=%lu crc=%lu nulla=%lu\r\n", (unsigned long)n,
+            printf("[%lu] ISO %s: nessuna risposta (BNE mai alto)   ok=%lu crc=%lu nulla=%lu\r\n", (unsigned long)n, fr,
                    (unsigned long)ok_count, (unsigned long)crc_count, (unsigned long)none_count);
         } else {
             uint8_t crc_ok = (f.cmd.crc == L9963E_DRV_crc_calc(f.val));
             uint8_t good   = crc_ok && f.cmd.pa == 0 && f.cmd.devid == 1 && f.cmd.addr == L9963E_DEV_GEN_CFG_ADDR;
-            if (good) { ok_count++; Stat2_LED_On(); } else { crc_count++; Stat2_LED_Off(); }
-            printf("[%lu] ricevuto %02X %02X %02X %02X %02X  CRC %s  pa=%u devid=%u addr=%u data=0x%05lX %s  ok=%lu crc=%lu nulla=%lu\r\n",
-                   (unsigned long)n, rx[0], rx[1], rx[2], rx[3], rx[4], crc_ok ? "ok" : "ERRATO", (unsigned)f.cmd.pa,
+            if (good) {
+                ok_count++;
+                if (use_fast) ok_fast++; else ok_slow++;
+                Stat2_LED_On();
+            } else {
+                crc_count++;
+                Stat2_LED_Off();
+            }
+            printf("[%lu] ISO %s: ricevuto %02X %02X %02X %02X %02X  CRC %s  pa=%u devid=%u addr=%u data=0x%05lX %s  ok=%lu crc=%lu nulla=%lu\r\n",
+                   (unsigned long)n, fr, rx[0], rx[1], rx[2], rx[3], rx[4], crc_ok ? "ok" : "ERRATO", (unsigned)f.cmd.pa,
                    (unsigned)f.cmd.devid, (unsigned)f.cmd.addr, (unsigned long)f.cmd.data,
                    good ? "<-- RISPOSTA OK" : "", (unsigned long)ok_count, (unsigned long)crc_count, (unsigned long)none_count);
+        }
+
+        /* Ogni 20 cicli (~4 s) una riga di sintesi che dice da sola dove guardare. */
+        if ((n % 20U) == 0U) {
+            printf("    --- SINTESI dopo %lu cicli: OK in lenta=%lu, OK in veloce=%lu -> %s\r\n", (unsigned long)n,
+                   (unsigned long)ok_slow, (unsigned long)ok_fast,
+                   (ok_slow || ok_fast)
+                       ? (ok_slow ? "LINEA ISO OK (lenta): riflasha il firmware normale"
+                                  : "la slave risponde SOLO in veloce: staccale le celle 10 s e riprova")
+                       : (crc_count ? "arriva segnale ma sempre corrotto: ampiezza/rumore/terminazione"
+                                    : "NIENTE dalla slave: cavo ISO, polarita' p/m, o slave non alimentata"));
         }
         DelayMs(200);
     }
