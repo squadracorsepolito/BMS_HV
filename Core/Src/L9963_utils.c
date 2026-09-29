@@ -54,18 +54,30 @@ void L9963E_utils_init(void) {
     printf("\r\n\r\n=========== BMS HV - avvio (anello singolo) ===========\r\n");
     printf("[1] Init transceiver TH (SPI3): DIS=LOW, TXEN, ISOFREQ=LOW (slow)\r\n");
     L9963E_init(&hl9963e, interface_H, N_SLAVES);
+    /* L9963E_init termina con DIS=LOW, che avvia la sequenza di wakeup del TH.
+     * DS L9963T Tab. 17: TWAKEUP = 1,06 ms max (da DIS↓ a ISO pronto a trasmettere).
+     * DS L9963T Tab. 9, stato Stand-by: "ISOFREQ shall be stable TISOFREQ_SETUP before the
+     * DIS high→low transition and shall NOT change during TWAKEUP".
+     * BUG FIX: prima si chiamava ISOFREQ_HIGH ~1 us dopo DIS↓, violando quel vincolo e
+     * lasciando il bit-rate del TH indeterminato. Ora aspettiamo che il TH sia in Normal
+     * state e da qui in poi ISOFREQ lo cambia solo addressing_procedure. */
+    DelayMs(5);
 
-    /* Reset preventivo: se l'MCU è stato resettato/riflashato mentre la slave era ancora sveglia,
-     * la slave è in ISO VELOCE con Lock_isoh_isofreq=1 e non capirebbe i frame lenti dell'addressing.
-     * Mandiamo SW_RST+GO2SLP in broadcast a frequenza veloce: la slave si resetta (chip_ID=0,
-     * ISO lenta) e va in sleep; l'addressing successivo la risveglia pulita.
-     * L9963T applica il nuovo ISOFREQ in TX solo DOPO il frame che lo ha campionato:
-     * il 1° frame esce ancora lento, il 2° esce veloce. Se la slave dormiva, non cambia nulla. */
-    printf("[1b] Reset preventivo slave (SW_RST+GO2SLP in ISO veloce)\r\n");
-    L9963E_DRV_ISOFREQ_HIGH(&(hl9963e.drv_handle));
+    /* Reset preventivo: se l'MCU è stato resettato/riflashato mentre la slave era ancora
+     * sveglia e indirizzata, il suo chip_ID è bloccato e non si farebbe riassegnare
+     * (DS L9963E §4.1.2: "The chip_ID field is then locked and no longer editable").
+     * SW_RST+GO2SLP in broadcast la riporta a chip_ID=0 e in sleep.
+     * BUG FIX: prima veniva mandato in ISO VELOCE. Funzionava solo nel caso particolare di
+     * slave rimasta bloccata in veloce; su una slave appena alimentata (che è SEMPRE in
+     * lenta: DS L9963E Tab. 16 "333 kbps low speed configuration, default") quei due frame
+     * erano solo rumore sulla linea.
+     * Nota: FSM non è scrivibile in Init state (DS L9963E §4.1.2: in Init solo chip_ID,
+     * isotx_en_h e iso_freq_sel sono scrivibili), quindi su una slave appena alimentata
+     * questa scrittura viene semplicemente ignorata. Nessun effetto collaterale. */
+    printf("[1b] Reset preventivo slave (SW_RST+GO2SLP, ISO lenta)\r\n");
+    L9963E_DRV_wakeup(&(hl9963e.drv_handle));
+    DelayMs(15); /* TWAKEUP slave: vedi note in L9963E_addressing_procedure */
     L9963E_sw_rst(&hl9963e, L9963E_DEVICE_BROADCAST, 1);
-    L9963E_sw_rst(&hl9963e, L9963E_DEVICE_BROADCAST, 1);
-    L9963E_DRV_ISOFREQ_LOW(&(hl9963e.drv_handle));
     DelayMs(5);
 
     /* Retry fino a 3 volte: al primo tentativo il t_SHUT potrebbe essere già scaduto
@@ -77,7 +89,20 @@ void L9963E_utils_init(void) {
              * Farthest_Unit=1 verrà settato automaticamente sull'ultimo slave. */
             uint32_t t_start = GetTickMs();
             printf("[2] Wakeup + addressing, tentativo %u/3 ...\r\n", (unsigned)(_attempt + 1U));
-            addr_ret = L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0, 1);
+            /* Parametri: iso_freq_sel=0b00 (333 kbps), is_dual_ring=0,
+             *            out_res_tx_iso=0b11 (ampiezza massima), lock_isofreq=0.
+             * BUG FIX / scelta di messa in servizio: prima era (0b11, 0, 0, 1), cioè
+             * 2,66 Mbps con ampiezza minima e configurazione bloccata. Tre problemi:
+             *  - 2,66 Mbps riduce di 8 volte il tempo di bit: ogni riflessione sul cavo,
+             *    terminazione non perfetta o rumore dell'inverter diventa un errore di CRC;
+             *  - out_res_tx_iso=0b00 è 440 Ohm (DS L9963E Tab. 18) = ampiezza MINIMA, mentre
+             *    il TXAMP del TH è internamente in pull-up = ampiezza massima: i due lati
+             *    erano disallineati (DS L9963T §4.4 raccomanda la stessa ampiezza su tutti);
+             *  - Lock_isoh_isofreq=1 rende iso_freq_sel e isotx_en_h non più scrivibili fino
+             *    a un power cycle DELLA SLAVE: dopo un reset dell'MCU la slave restava
+             *    bloccata in veloce e non capiva più i frame lenti dell'addressing.
+             * Con il link funzionante si può tornare a (0b11, 0, 0b11, 1) per la velocità. */
+            addr_ret = L9963E_addressing_procedure(&hl9963e, 0b00, 0, 0b11, 0);
             printf("    -> %s (%lu ms)\r\n", addr_ret == L9963E_OK ? "OK" : "TIMEOUT: la slave non risponde",
                    (unsigned long)(GetTickMs() - t_start));
         }
@@ -131,7 +156,12 @@ void L9963E_utils_init(void) {
     bal2_conf_reg.Bal_2.ThrTimedBalCell14     = 5;  // 20s treshold
     L9963E_RegisterUnionTypeDef bal3_conf_reg = {.generic = L9963E_BAL_3_DEFAULT};
     bal3_conf_reg.Bal_3.ThrTimedBalCell12     = 5;
-    bal3_conf_reg.Bal_3.Lock_isoh_isofreq     = 1;  // Preserve lock set by addressing_procedure
+    /* Lock_isoh_isofreq = 0: in messa in servizio NON blocchiamo iso_freq_sel/isotx_en_h,
+     * altrimenti dopo un reset dell'MCU la slave resta bloccata sulla configurazione
+     * precedente fino a un power cycle del pacco (DS L9963E §4.2.3: il lock si azzera solo
+     * quando il dispositivo va in low power). Va rimesso a 1 quando il link è affidabile,
+     * insieme a lock_isofreq=1 in L9963E_addressing_procedure. */
+    bal3_conf_reg.Bal_3.Lock_isoh_isofreq     = 0;
     L9963E_RegisterUnionTypeDef bal5_conf_reg = {.generic = L9963E_BAL_5_DEFAULT};
     bal5_conf_reg.Bal_5.ThrTimedBalCell8      = 5;
     bal5_conf_reg.Bal_5.ThrTimedBalCell7      = 5;
@@ -176,12 +206,14 @@ void L9963E_utils_init(void) {
         L9963E_RegisterUnionTypeDef msk = {.generic = 0};
         exp.DEV_GEN_CFG.chip_ID       = 1;
         exp.DEV_GEN_CFG.isotx_en_h    = (N_SLAVES == 1) ? 0 : 1;
-        exp.DEV_GEN_CFG.iso_freq_sel  = 0b11;
-        exp.DEV_GEN_CFG.Farthest_Unit = (N_SLAVES == 1) ? 1 : 0;
-        msk.DEV_GEN_CFG.chip_ID       = 0x1F;
-        msk.DEV_GEN_CFG.isotx_en_h    = 1;
-        msk.DEV_GEN_CFG.iso_freq_sel  = 0b11;
-        msk.DEV_GEN_CFG.Farthest_Unit = 1;
+        exp.DEV_GEN_CFG.iso_freq_sel   = 0b00; /* allineato ad addressing_procedure */
+        exp.DEV_GEN_CFG.out_res_tx_iso = 0b11;
+        exp.DEV_GEN_CFG.Farthest_Unit  = (N_SLAVES == 1) ? 1 : 0;
+        msk.DEV_GEN_CFG.chip_ID        = 0x1F;
+        msk.DEV_GEN_CFG.isotx_en_h     = 1;
+        msk.DEV_GEN_CFG.iso_freq_sel   = 0b11;
+        msk.DEV_GEN_CFG.out_res_tx_iso = 0b11;
+        msk.DEV_GEN_CFG.Farthest_Unit  = 1;
         _dbg_check_reg("DEV_GEN_CFG", L9963E_DEV_GEN_CFG_ADDR, exp.generic, msk.generic);
 
         exp.generic                   = 0;
