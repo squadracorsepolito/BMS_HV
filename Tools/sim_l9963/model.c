@@ -71,7 +71,7 @@ typedef struct {
     uint64_t conv_done_at; int conv_gpio;
     uint16_t cell_raw[14]; uint16_t gpio_raw[7];
 } Slave;
-static Slave SL[8];
+static Slave SL[32]; /* fino a 31 slave indirizzabili (DS L9963E Tab. 16) */
 
 static uint64_t fr_get(uint64_t v, int off, int w) { return (v >> off) & ((1ULL << w) - 1); }
 #define F_CRC(v)   fr_get(v, 0, 6)
@@ -440,8 +440,15 @@ int sim_check_slave(int k, int dual) {
     #define CHK(c, msg) do { if (!(c)) { printf("   CHECK FALLITO: %s\n", msg); ok = 0; } } while (0)
     CHK(s->state == SL_NORMAL, "slave non in NORMAL");
     CHK(dev_chip(s) == (uint32_t)(k + 1), "chip_ID errato");
-    CHK(dev_freq(s) == 3 && s->fast, "slave non in ISO veloce");
-    CHK(lock_bit(s) == 1, "Lock_isoh_isofreq non impostato");
+    /* Non si pretende piu' una frequenza specifica: in messa in servizio il firmware resta
+     * legittimamente a 333 kbps. L'invariante vero e' che slave e transceiver del master siano
+     * alla STESSA velocita', altrimenti non si capiscono (DS L9963T §4.4: "The new bit rate of
+     * L9963T must be compatible with the one of all other units communicating on the bus").
+     * Questo check trova il guasto reale in entrambi i versi, quello vecchio no. */
+    CHK(s->fast == (dev_freq(s) == 3), "iso_freq_sel della slave incoerente col suo bit-rate");
+    CHK(s->fast == TH.tx_fast, "slave e TH del master a bit-rate DIVERSI: non si capirebbero");
+    (void)lock_bit; /* Lock_isoh_isofreq non piu' imposto: bloccarlo impedisce il recupero
+                       dopo un reset del solo MCU (si azzera solo andando in low power). */
     CHK(commto(s) == 3, "CommTimeout != 2048 ms (broadcast perso?)");
     CHK((s->reg[R_VCELLEN] & 0x3FFF) == 0x38FF, "VCELLS_EN errato (broadcast perso?)");
     CHK(((s->reg[R_GPIOCF] >> 12) & 3) == 2 && ((s->reg[R_GPIOCF] >> 14) & 3) == 0, "GPIO7/GPIO8 config errata");

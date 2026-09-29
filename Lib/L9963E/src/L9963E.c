@@ -81,15 +81,42 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
             read_reg.DEV_GEN_CFG.chip_ID == x) {
             ++x;
             tick = L9963E_DRV_GETTICK(&(handle->drv_handle));
+
+            /* BUG FIX IMPORTANTE (catena di piu' slave).
+             * Il valore di RESET di CommTimeout e' 0b00 (DS L9963E Tab. 72) = t_SLEEP_00 =
+             * 32 ms (Tab. 11). Una slave appena indirizzata e' in Normal state e quindi il
+             * suo timer di comunicazione e' attivo: se il resto della procedura di addressing
+             * dura piu' di 32 ms senza mandarle un frame valido, si ADDORMENTA — e con lei
+             * smette di ripetere i frame verso le slave superiori, che non vengono mai
+             * raggiunte. Il vecchio codice restava sotto i 32 ms solo per caso (attesa di
+             * wakeup di 2 ms) e con margine zero: un solo retry faceva cadere tutto.
+             * Alziamo il CommTimeout a 2048 ms appena una slave entra in Normal.
+             * In Init state fastch_baluv NON e' scrivibile (DS §4.1.2: in Init solo chip_ID,
+             * isotx_en_h e iso_freq_sel), quindi la slave non ancora indirizzata ignora
+             * questo broadcast: nessun effetto collaterale. */
+            L9963E_RegisterUnionTypeDef commto_reg = {.generic = L9963E_FASTCH_BALUV_DEFAULT};
+            commto_reg.fastch_baluv.CommTimeout    = _2048MS;
+            L9963E_DRV_reg_write(
+                &(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_fastch_baluv_ADDR, &commto_reg, 10);
         } else {
-            if (L9963E_DRV_GETTICK(&(handle->drv_handle)) - tick >= 100) {
+            /* Budget per indirizzare UNA slave.
+             * Prima era 100 ms: con ~30 ms per tentativo dava solo 3 tentativi, e con
+             * l'attesa di wakeup corretta (sotto) nemmeno due. Il t_SHUT della slave è di
+             * 60 s (DS L9963E Tab. 11), quindi 1,5 s per slave è larghissimo e permette
+             * ~15 tentativi con un wakeup fresco ciascuno. */
+            if (L9963E_DRV_GETTICK(&(handle->drv_handle)) - tick >= 1500) {
                 return L9963E_TIMEOUT;
             }
 
             //wakeup the device
             L9963E_DRV_wakeup(&(handle->drv_handle));
-            // by default the wakeup procedure needs 2 ms of time (T_WAKEUP)
-            L9963E_DRV_DELAY(&(handle->drv_handle), 2);
+            /* BUG FIX: prima erano 2 ms. Il DS L9963E Tab. 11 dà TWAKEUP = 2 ms come valore
+             * MASSIMO (da evento di wakeup a VCOM fuori da UV), ma nella stessa tabella:
+             *   timeout_VCOM_UP_first = 8 ms  (primo power up!)
+             *   timeout_OSCI_MAIN     = 10 ms (da wakeup a oscillatore principale stabile)
+             * Aspettando esattamente 2 ms il broadcast di addressing partiva mentre la slave
+             * non era ancora in ascolto, e veniva perso in silenzio. 15 ms copre tutto. */
+            L9963E_DRV_DELAY(&(handle->drv_handle), 15);
 
             //send broadcast command setting the chip_id
             write_reg.generic                  = L9963E_DEV_GEN_CFG_DEFAULT;
@@ -113,8 +140,21 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
             if (x == handle->slave_n && !is_dual_ring) {
                 write_reg.DEV_GEN_CFG.Farthest_Unit = 0b1;
                 write_reg.DEV_GEN_CFG.isotx_en_h    = 0b0; /* ultima slave: porta H spenta */
-                L9963E_DRV_reg_write(
-                    &(handle->drv_handle), x, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
+                /* BUG FIX: questa unicast partiva ~2 ms dopo la broadcast e il suo esito non
+                 * veniva controllato. È l'UNICA scrittura che rende la slave raggiungibile in
+                 * anello singolo: con isotx_en_h=1 la slave risponde sulla porta H, che qui
+                 * non è collegata a nulla, e il master non sente mai niente. Se andava perduta
+                 * (la slave stava ancora transitando Init→Normal) il chip_ID era già bloccato
+                 * e il loop non poteva più recuperare: ogni giro successivo rimetteva
+                 * isotx_en_h=1 con la broadcast. Ora aspettiamo la transizione e riproviamo
+                 * finché il readback non conferma. */
+                L9963E_DRV_DELAY(&(handle->drv_handle), 5);
+                for (uint8_t k = 0; k < 5U; ++k) {
+                    if (L9963E_DRV_reg_write(
+                            &(handle->drv_handle), x, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10) == L9963E_OK) {
+                        break;
+                    }
+                }
             }
         }
     }

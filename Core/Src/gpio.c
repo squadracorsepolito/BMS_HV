@@ -66,13 +66,17 @@ void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(L9963TL_DIS_GPIO_INOUT_GPIO_Port, L9963TL_DIS_GPIO_INOUT_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, L9963TL_NCS_GPIO_OUT_Pin|L9963TL_TXEN_GPIO_OUT_Pin, GPIO_PIN_RESET);
+  /* FIX: NCS del TL deve partire ALTO (deasserito): e' attivo basso. Prima partiva basso,
+     quindi il transceiver restava selezionato da subito fino a L9963E_init. */
+  HAL_GPIO_WritePin(GPIOA, L9963TL_NCS_GPIO_OUT_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOA, L9963TL_TXEN_GPIO_OUT_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(L9963TH_DIS_GPIO_INOUT_GPIO_Port, L9963TH_DIS_GPIO_INOUT_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(L9963TH_NCS_GPIO_OUT_GPIO_Port, L9963TH_NCS_GPIO_OUT_Pin, GPIO_PIN_RESET);
+  /* FIX: idem per il TH. */
+  HAL_GPIO_WritePin(L9963TH_NCS_GPIO_OUT_GPIO_Port, L9963TH_NCS_GPIO_OUT_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pins : STAT1_LED_GPIO_OUT_Pin WARN_LED_GPIO_OUT_Pin STAT2_LED_GPIO_OUT_Pin ERR_LED_GPIO_OUT_Pin */
   GPIO_InitStruct.Pin = STAT1_LED_GPIO_OUT_Pin|WARN_LED_GPIO_OUT_Pin|STAT2_LED_GPIO_OUT_Pin|ERR_LED_GPIO_OUT_Pin;
@@ -178,6 +182,23 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(L9963TH_NCS_GPIO_OUT_GPIO_Port, &GPIO_InitStruct);
+
+  /* FIX: BNE dei due transceiver con PULL-DOWN invece di NOPULL.
+     DS L9963T §3.5.3: se scatta la BNE short detection, il buffer di uscita BNE va in alta
+     impedenza e ci resta fino alla successiva transizione Stand-by -> Normal. Con NOPULL un
+     BNE in HiZ fluttua e puo' leggersi alto: il driver crederebbe che ci sia un frame in coda
+     e leggerebbe byte fantasma. Con il pull-down un BNE in HiZ si legge "coda vuota", che e'
+     uno stato sicuro e diagnosticabile (timeout invece di dati inventati).
+     Il pull-down interno (~40 kOhm) non contrasta l'uscita push-pull del L9963T (2 mA). */
+  GPIO_InitStruct.Pin = L9963TH_BNE_GPIO_IN_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(L9963TH_BNE_GPIO_IN_GPIO_Port, &GPIO_InitStruct);
+
+  GPIO_InitStruct.Pin = L9963TL_BNE_GPIO_IN_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(L9963TL_BNE_GPIO_IN_GPIO_Port, &GPIO_InitStruct);
 
 }
 
