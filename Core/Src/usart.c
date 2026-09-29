@@ -21,7 +21,13 @@
 #include "usart.h"
 
 /* USER CODE BEGIN 0 */
-
+extern UART_HandleTypeDef huart3;
+/* printf → USART3 (TX = PB10, 115200 8N1). Usato per il debug da terminale. */
+int _write(int file, char *ptr, int len) {
+    (void)file;
+    HAL_UART_Transmit(&huart3, (uint8_t *)ptr, (uint16_t)len, 100);
+    return len;
+}
 /* USER CODE END 0 */
 
 UART_HandleTypeDef huart3;

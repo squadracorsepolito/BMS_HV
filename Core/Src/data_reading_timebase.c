@@ -1,6 +1,8 @@
 #include "data_reading_timebase.h"
 #include "L9963_utils.h"
 #include "ntc.h"
+#include "tim.h"
+
 TIMEBASE_HandleTypeDef data_reading_timebase_handle;
 extern volatile uint16_t vcells[N_SLAVES][N_CELLS_PER_SLAVE];
 extern volatile uint16_t vgpio[N_SLAVES][N_GPIOS_PER_SLAVE];
@@ -14,8 +16,11 @@ void data_reading_timebase_init(void) {
   
     TIMEBASE_init(&data_reading_timebase_handle, &htim6, 1000);
   
-    TIMEBASE_add_interval(&data_reading_timebase_handle, 10000, &interval);
+    TIMEBASE_add_interval(&data_reading_timebase_handle, 100, &interval);
     TIMEBASE_register_callback(&data_reading_timebase_handle, interval, data_reading_l9963e_cb);
+
+    // Ci stiamo assicurando di chiamare il timer fisciamente
+    HAL_TIM_Base_Start_IT(&htim6);
   }
 
 // Induce AMS ERROR if there is a overvoltage for 500 ms
@@ -34,7 +39,7 @@ STMLIBS_StatusTypeDef data_reading_l9963e_cb(){
 
                 if (vgpio[i][j] > OVERTEMPERATURE_TRESHOLD){
                     overtemperature_count[i][j]++;
-
+                    //controllare le tempistiche con cui accade ciò
                     if (overtemperature_count[i][j] > 100){ // 1000 ms
                         ams_error = SET;
                     }

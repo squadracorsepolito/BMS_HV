@@ -29,6 +29,25 @@ L9963E_StatusTypeDef L9963E_init(L9963E_HandleTypeDef *handle, L9963E_IfTypeDef 
     return L9963E_DRV_init(&(handle->drv_handle), interface);
 }
 
+L9963E_StatusTypeDef L9963E_init_dual_ring(L9963E_HandleTypeDef *handle,
+                                           L9963E_IfTypeDef tx_interface,
+                                           L9963E_IfTypeDef rx_interface,
+                                           uint8_t slave_n) {
+#if L9963E_DEBUG
+    if (handle == NULL) {
+        return L9963E_ERROR;
+    }
+
+    if (slave_n >= 32) {
+        return L9963E_ERROR;
+    }
+#endif
+
+    handle->slave_n = slave_n;
+
+    return L9963E_DRV_init_dual_ring(&(handle->drv_handle), tx_interface, rx_interface);
+}
+
 L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
                                                  uint8_t iso_freq_sel,
                                                  uint8_t is_dual_ring,
@@ -46,6 +65,13 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
     }
 #endif
 
+    /* Durante l'addressing le risposte si leggono SEMPRE dal TH (lato basso), anche in doppio
+     * anello (DS L9963E §4.2.3.2: "the addressing procedure follows the standard approach"):
+     * le slave non ancora indirizzate hanno la porta H spenta e non farebbero salire le
+     * risposte fino al TL. Il passaggio al TL avviene a fine procedura. */
+    handle->is_dual_ring             = is_dual_ring;
+    handle->drv_handle.is_dual_ring  = 0;
+
     while (x <= handle->slave_n) {
         write_reg.generic = 0;
         read_reg.generic  = 0;
@@ -55,45 +81,146 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
             read_reg.DEV_GEN_CFG.chip_ID == x) {
             ++x;
             tick = L9963E_DRV_GETTICK(&(handle->drv_handle));
+
+            /* BUG FIX IMPORTANTE (catena di piu' slave).
+             * Il valore di RESET di CommTimeout e' 0b00 (DS L9963E Tab. 72) = t_SLEEP_00 =
+             * 32 ms (Tab. 11). Una slave appena indirizzata e' in Normal state e quindi il
+             * suo timer di comunicazione e' attivo: se il resto della procedura di addressing
+             * dura piu' di 32 ms senza mandarle un frame valido, si ADDORMENTA — e con lei
+             * smette di ripetere i frame verso le slave superiori, che non vengono mai
+             * raggiunte. Il vecchio codice restava sotto i 32 ms solo per caso (attesa di
+             * wakeup di 2 ms) e con margine zero: un solo retry faceva cadere tutto.
+             * Alziamo il CommTimeout a 2048 ms appena una slave entra in Normal.
+             * In Init state fastch_baluv NON e' scrivibile (DS §4.1.2: in Init solo chip_ID,
+             * isotx_en_h e iso_freq_sel), quindi la slave non ancora indirizzata ignora
+             * questo broadcast: nessun effetto collaterale. */
+            L9963E_RegisterUnionTypeDef commto_reg = {.generic = L9963E_FASTCH_BALUV_DEFAULT};
+            commto_reg.fastch_baluv.CommTimeout    = _2048MS;
+            L9963E_DRV_reg_write(
+                &(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_fastch_baluv_ADDR, &commto_reg, 10);
         } else {
-            if (L9963E_DRV_GETTICK(&(handle->drv_handle)) - tick >= 10) {
+            /* Budget per indirizzare UNA slave.
+             * Prima era 100 ms: con ~30 ms per tentativo dava solo 3 tentativi, e con
+             * l'attesa di wakeup corretta (sotto) nemmeno due. Il t_SHUT della slave è di
+             * 60 s (DS L9963E Tab. 11), quindi 1,5 s per slave è larghissimo e permette
+             * ~15 tentativi con un wakeup fresco ciascuno. */
+            if (L9963E_DRV_GETTICK(&(handle->drv_handle)) - tick >= 1500) {
                 return L9963E_TIMEOUT;
             }
 
             //wakeup the device
             L9963E_DRV_wakeup(&(handle->drv_handle));
-            // by default the wakeup procedure needs 2 ms of time (T_WAKEUP)
-            L9963E_DRV_DELAY(&(handle->drv_handle), 2);
+            /* BUG FIX: prima erano 2 ms. Il DS L9963E Tab. 11 dà TWAKEUP = 2 ms come valore
+             * MASSIMO (da evento di wakeup a VCOM fuori da UV), ma nella stessa tabella:
+             *   timeout_VCOM_UP_first = 8 ms  (primo power up!)
+             *   timeout_OSCI_MAIN     = 10 ms (da wakeup a oscillatore principale stabile)
+             * Aspettando esattamente 2 ms il broadcast di addressing partiva mentre la slave
+             * non era ancora in ascolto, e veniva perso in silenzio. 15 ms copre tutto. */
+            L9963E_DRV_DELAY(&(handle->drv_handle), 15);
 
-            //send broadcast command setting the chip_idz
+            //send broadcast command setting the chip_id
             write_reg.generic                  = L9963E_DEV_GEN_CFG_DEFAULT;
             write_reg.DEV_GEN_CFG.chip_ID      = x;
             write_reg.DEV_GEN_CFG.iso_freq_sel = 0b00;
+            /* BUG FIX IMPORTANTE (ampiezza del segnale nel verso slave→master).
+             * out_res_tx_iso imposta l'ampiezza del TRASMETTITORE DELLA SLAVE, cioè la
+             * direzione slave→master: è il segnale che il master deve riuscire a leggere.
+             * Il suo valore di RESET è 0b00 = 440 Ohm (DS L9963E Tab. 18) = ampiezza MINIMA.
+             * Prima veniva scritto solo nel broadcast FINALE, dopo la fine dell'addressing:
+             * quindi tutte le risposte durante l'addressing — comprese quelle su cui si basa
+             * il readback che fa avanzare il ciclo — uscivano al minimo di ampiezza.
+             * Con VDIFF_ISO_IN del ricevitore fino a 320 mV (DS L9963T Tab. 24) il margine
+             * era quasi nullo. Lo impostiamo subito, dal primo broadcast.
+             * In Init state out_res_tx_iso non è tra i campi scrivibili (DS §4.1.2: solo
+             * chip_ID, isotx_en_h, iso_freq_sel), ma la slave passa a Normal nello stesso
+             * frame che le assegna il chip_ID, quindi il valore viene applicato lì. */
+            write_reg.DEV_GEN_CFG.out_res_tx_iso = out_res_tx_iso;
+            /* isotx_en_h=1 durante l'addressing (algoritmo DS L9963E §4.1.2.2):
+             * serve a far proseguire i frame verso la slave successiva (x+1).
+             * In anello singolo l'ULTIMA slave viene poi messa a isotx_en_h=0
+             * con la unicast finale (insieme a Farthest_Unit=1). */
             write_reg.DEV_GEN_CFG.isotx_en_h   = 0b1;
 
             L9963E_DRV_reg_write(
                 &(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
+
+            /* FIX: Farthest_Unit NON è scrivibile in Init state (DS §4.1.2.2).
+             * La broadcast sopra ha portato la slave in Normal state (chip_ID=x assegnato).
+             * In Normal state possiamo fare una unicast write per settare Farthest_Unit=1.
+             * La slave processa la write (Farthest_Unit→1) PRIMA di inviare la risposta
+             * (echo), quindi può già rispondere con Farthest_Unit=1 attivo.
+             * Così al prossimo giro il reg_read ha successo → ++x → loop esce. */
+            if (x == handle->slave_n && !is_dual_ring) {
+                write_reg.DEV_GEN_CFG.Farthest_Unit = 0b1;
+                write_reg.DEV_GEN_CFG.isotx_en_h    = 0b0; /* ultima slave: porta H spenta */
+                /* BUG FIX: questa unicast partiva ~2 ms dopo la broadcast e il suo esito non
+                 * veniva controllato. È l'UNICA scrittura che rende la slave raggiungibile in
+                 * anello singolo: con isotx_en_h=1 la slave risponde sulla porta H, che qui
+                 * non è collegata a nulla, e il master non sente mai niente. Se andava perduta
+                 * (la slave stava ancora transitando Init→Normal) il chip_ID era già bloccato
+                 * e il loop non poteva più recuperare: ogni giro successivo rimetteva
+                 * isotx_en_h=1 con la broadcast. Ora aspettiamo la transizione e riproviamo
+                 * finché il readback non conferma. */
+                L9963E_DRV_DELAY(&(handle->drv_handle), 5);
+                for (uint8_t k = 0; k < 5U; ++k) {
+                    if (L9963E_DRV_reg_write(
+                            &(handle->drv_handle), x, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10) == L9963E_OK) {
+                        break;
+                    }
+                }
+            }
         }
     }
 
+    if (is_dual_ring) {
+        /* Da qui in poi: TH solo TX (TXEN fisso alto), risposte lette dal TL.
+         * TXEN deve essere stabile >1.4 us prima del prossimo NCS↓: lo garantisce il delay
+         * di 1 ms all'inizio di _L9963E_DRV_spi_transmit. */
+        handle->drv_handle.is_dual_ring = 1;
+        L9963E_DRV_TXEN_HIGH(&(handle->drv_handle));
+    }
+
     write_reg.generic                    = L9963E_DEV_GEN_CFG_DEFAULT;
+    /* Broadcast finale con isotx_en_h=1 (tutte le slave inoltrano verso l'alto).
+     * In anello singolo la unicast successiva spegne la porta H dell'ultima slave. */
     write_reg.DEV_GEN_CFG.isotx_en_h     = 0b1;
     write_reg.DEV_GEN_CFG.out_res_tx_iso = out_res_tx_iso;
     write_reg.DEV_GEN_CFG.iso_freq_sel   = iso_freq_sel;
 
-    if (iso_freq_sel == 0b11)
+    if (iso_freq_sel == 0b11) {
         L9963E_DRV_ISOFREQ_HIGH(&(handle->drv_handle));
-    else
+        if (is_dual_ring) L9963E_DRV_RX_ISOFREQ_HIGH(&(handle->drv_handle)); /* TL segue la stessa freq */
+    } else {
         L9963E_DRV_ISOFREQ_LOW(&(handle->drv_handle));
+        if (is_dual_ring) L9963E_DRV_RX_ISOFREQ_LOW(&(handle->drv_handle));
+    }
+
+    if (is_dual_ring) {
+        /* L9963T campiona ISOFREQ solo sul fronte di discesa di NCS (DS L9963T Tab. 9).
+         * Il TL viene selezionato solo quando leggiamo: senza questo NCS "a vuoto" resterebbe
+         * in RX lenta e perderebbe la prima risposta veloce. Con TXEN(TL)=0 i byte su MOSI
+         * sono scartati; l'eventuale frame vecchio in coda viene letto e buttato. */
+        uint8_t dummy[5] = {0};
+        uint8_t n        = 0;
+        L9963E_DRV_DELAY(&(handle->drv_handle), 1); /* setup ISOFREQ > 1.4 us */
+        do { /* svuota anche i frame accumulati dal TL durante l'addressing (max 20 in coda) */
+            L9963E_DRV_RX_CS_LOW(&(handle->drv_handle));
+            (void)L9963E_DRV_RX_SPI_RECEIVE(&(handle->drv_handle), dummy, 5, 10);
+            L9963E_DRV_RX_CS_HIGH(&(handle->drv_handle));
+        } while (L9963E_DRV_RX_BNE_READ(&(handle->drv_handle)) == L9963E_IF_GPIO_PIN_SET && ++n < 25U);
+    }
 
     L9963E_DRV_reg_write(&(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
 
-    write_reg.DEV_GEN_CFG.Farthest_Unit = 0b1;
-    if (!handle->is_dual_ring) {
-        write_reg.DEV_GEN_CFG.isotx_en_h = 0;
+    /* Unicast Farthest_Unit → solo in anello singolo.
+     * In doppio anello la slave risponde via ISO_H (isotx_en_h=1): non serve l'eco in catena,
+     * quindi Farthest_Unit non è necessario e NON va impostato. */
+    if (!is_dual_ring) {
+        write_reg.DEV_GEN_CFG.chip_ID       = handle->slave_n;
+        write_reg.DEV_GEN_CFG.Farthest_Unit = 0b1;
+        write_reg.DEV_GEN_CFG.isotx_en_h    = 0b0; /* ultima slave: risponde solo via ISO_L → TH */
+        L9963E_DRV_reg_write(&(handle->drv_handle), handle->slave_n, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
     }
-
-    L9963E_DRV_reg_write(&(handle->drv_handle), handle->slave_n, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
 
     if (lock_isofreq == 1) {
         write_reg.generic                 = L9963E_BAL_3_DEFAULT;

@@ -66,14 +66,32 @@ typedef enum L9963E_StartConvertionOptEnum L9963E_StartConvertionOptTypeDef;
 enum L9963E_CommTimeoutEnum { _32MS = 0b00, _256MS = 0b01, _1024MS = 0b10, _2048MS = 0b11 };
 typedef enum L9963E_CommTimeoutEnum L9963E_CommTimeoutTypeDef;
 /**
- * @brief Initializes the L9963E device.
- * 
+ * @brief Initializes the L9963E device (anello singolo — solo TH).
+ *
  * @param handle Pointer to the L9963E handle structure.
- * @param interface Communication interface type.
+ * @param interface Communication interface type (TH, SPI3).
  * @param slave_n Slave count.
  * @return L9963E status (L9963E_OK on success, L9963E_ERROR on failure).
  */
 L9963E_StatusTypeDef L9963E_init(L9963E_HandleTypeDef *handle, L9963E_IfTypeDef interface, uint8_t slave_n);
+/**
+ * @brief Initializes the L9963E device in dual-ring mode (TH TX + TL RX).
+ *
+ *  Topologia doppio anello:
+ *    - tx_interface (TH, SPI3): comandi MCU→Slave via ISO_H→ISO_L
+ *    - rx_interface (TL, SPI2): risposte Slave via ISO_H della slave→ISO_L del TL
+ *  Richiede isotx_en_h=1 nello slave (impostato da L9963E_addressing_procedure con is_dual_ring=1).
+ *
+ * @param handle       Pointer to the L9963E handle structure.
+ * @param tx_interface TX interface (TH, SPI3).
+ * @param rx_interface RX interface (TL, SPI2).
+ * @param slave_n      Slave count.
+ * @return L9963E status (L9963E_OK on success, L9963E_ERROR on failure).
+ */
+L9963E_StatusTypeDef L9963E_init_dual_ring(L9963E_HandleTypeDef *handle,
+                                           L9963E_IfTypeDef tx_interface,
+                                           L9963E_IfTypeDef rx_interface,
+                                           uint8_t slave_n);
 /**
  * @brief Performs the addressing procedure for L9963E devices.
  * 
