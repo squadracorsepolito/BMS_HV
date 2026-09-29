@@ -116,6 +116,8 @@ int main(void)
 
   /* USER CODE BEGIN Init */
     setvbuf(stdout, NULL, _IONBF, 0); /* printf senza buffer → esce subito su USART3 */
+    /* BRANCH DI DIAGNOSI: al posto dell'init normale entra nel ciclo di test ISO e non ne esce */
+    L9963E_utils_diag_loop(0);
     L9963E_utils_init();
 
     data_reading_timebase_init();

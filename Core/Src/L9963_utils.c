@@ -511,3 +511,76 @@ L9963_Utils_StatusTypeDef L9963E_utils_balance_cells(void) {
     L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_1_ADDR, &bal1_conf_reg, 10);
     return L9963_UTILS_OK;
 }
+
+/* ======================= DIAGNOSI ISO (branch diag/iso-loop) =======================
+ * Ciclo continuo: wakeup -> broadcast chip_ID=1 -> lettura DEV_GEN_CFG della slave 1.
+ * Stampa cosa torna indietro GREZZO (anche se il CRC e' sbagliato), cosi' si distingue:
+ *   - "nessuna risposta"   -> la slave non capisce i frame (ampiezza, p/m, porta, frequenza)
+ *   - "CRC ERRATO"         -> torna qualcosa ma corrotto (ampiezza/rumore/SPI)
+ *   - "RISPOSTA OK"        -> comunicazione funzionante
+ * STAT2 LED acceso = ultima risposta OK. WARN LED lampeggia a ogni ciclo.
+ * Si possono scambiare p/m o cambiare TXAMP a caldo e vedere subito l'effetto. */
+extern L9963E_StatusTypeDef _L9963E_DRV_build_frame(uint8_t *, uint8_t, uint8_t, uint8_t, uint8_t, uint32_t);
+extern L9963E_StatusTypeDef _L9963E_DRV_spi_transmit(L9963E_DRV_HandleTypeDef *, uint8_t *, uint8_t, uint8_t);
+extern void _L9963E_DRV_switch_endianness(uint8_t *, uint8_t *);
+
+void L9963E_utils_diag_loop(uint32_t max_cycles) {
+    L9963E_DRV_HandleTypeDef *d = &(hl9963e.drv_handle);
+    uint32_t ok_count = 0, crc_count = 0, none_count = 0;
+
+    /* Init del solo TH, senza addressing: la slave resta in ISO lenta (default) */
+    L9963E_init(&hl9963e, interface_H, 1);
+    d->is_dual_ring = 0;
+    printf("\r\n=== DIAGNOSI ISO (anello singolo, ISO lenta): wakeup + addressing + lettura, ogni 200 ms ===\r\n");
+    printf("Pin TH: DIS=%d (deve essere 0)  ISOFREQ=%d (deve essere 0)\r\n",
+           (int)L9963E_DRV_DIS_READ(d), (int)L9963E_DRV_ISOFREQ_READ(d));
+
+    for (uint32_t n = 1; max_cycles == 0 || n <= max_cycles; ++n) {
+        L9963E_RegisterUnionTypeDef w = {.generic = L9963E_DEV_GEN_CFG_DEFAULT};
+        uint8_t tx[5], rx[5] = {0}, got = 0;
+        union L9963E_DRV_FrameUnion f = {.val = 0};
+
+        Warn_LED_On();
+        L9963E_DRV_ISOFREQ_LOW(d);
+        L9963E_DRV_wakeup(d);
+        DelayMs(3);
+
+        w.DEV_GEN_CFG.chip_ID = 1;
+        L9963E_DRV_reg_write(d, L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &w, 10);
+
+        /* svuota eventuali frame vecchi nella RX del TH */
+        for (uint8_t k = 0; k < 20 && L9963E_DRV_BNE_READ(d) == L9963E_IF_GPIO_PIN_SET; ++k) {
+            L9963E_DRV_CS_LOW(d); L9963E_DRV_SPI_RECEIVE(d, rx, 5, 10); L9963E_DRV_CS_HIGH(d);
+        }
+
+        _L9963E_DRV_build_frame(tx, 1, 0, 1, L9963E_DEV_GEN_CFG_ADDR, 0);
+        _L9963E_DRV_spi_transmit(d, tx, 5, 10);
+        uint32_t t0 = GetTickMs();
+        while (GetTickMs() - t0 < 10U) {
+            if (L9963E_DRV_BNE_READ(d) == L9963E_IF_GPIO_PIN_SET) { got = 1; break; }
+        }
+        if (got) {
+            L9963E_DRV_CS_LOW(d);
+            L9963E_DRV_SPI_RECEIVE(d, rx, 5, 10);
+            L9963E_DRV_CS_HIGH(d);
+            _L9963E_DRV_switch_endianness(rx, (uint8_t *)&f.val);
+        }
+        Warn_LED_Off();
+
+        if (!got) {
+            none_count++;
+            Stat2_LED_Off();
+            printf("[%lu] nessuna risposta (BNE mai alto)            ok=%lu crc=%lu nulla=%lu\r\n", (unsigned long)n,
+                   (unsigned long)ok_count, (unsigned long)crc_count, (unsigned long)none_count);
+        } else {
+            uint8_t crc_ok = (f.cmd.crc == L9963E_DRV_crc_calc(f.val));
+            uint8_t good   = crc_ok && f.cmd.pa == 0 && f.cmd.devid == 1 && f.cmd.addr == L9963E_DEV_GEN_CFG_ADDR;
+            if (good) { ok_count++; Stat2_LED_On(); } else { crc_count++; Stat2_LED_Off(); }
+            printf("[%lu] ricevuto %02X %02X %02X %02X %02X  CRC %s  pa=%u devid=%u addr=%u data=0x%05lX %s  ok=%lu crc=%lu nulla=%lu\r\n",
+                   (unsigned long)n, rx[0], rx[1], rx[2], rx[3], rx[4], crc_ok ? "ok" : "ERRATO", (unsigned)f.cmd.pa,
+                   (unsigned)f.cmd.devid, (unsigned)f.cmd.addr, (unsigned long)f.cmd.data,
+                   good ? "<-- RISPOSTA OK" : "", (unsigned long)ok_count, (unsigned long)crc_count, (unsigned long)none_count);
+        }
+        DelayMs(200);
+    }
+}
