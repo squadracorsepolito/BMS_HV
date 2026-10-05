@@ -40,9 +40,9 @@ void MX_TIM6_Init(void)
 
   /* USER CODE END TIM6_Init 1 */
   htim6.Instance = TIM6;
-  htim6.Init.Prescaler = 899;
+  htim6.Init.Prescaler = 15;
   htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim6.Init.Period = 8999;
+  htim6.Init.Period = 999;
   htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim6) != HAL_OK)
   {
@@ -68,6 +68,8 @@ void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* tim_baseHandle)
   /* USER CODE BEGIN TIM6_MspInit 0 */
 
   /* USER CODE END TIM6_MspInit 0 */
+    HAL_NVIC_SetPriority(TIM6_DAC_IRQn, 5, 0);
+    HAL_NVIC_EnableIRQ(TIM6_DAC_IRQn);
     /* TIM6 clock enable */
     __HAL_RCC_TIM6_CLK_ENABLE();
   /* USER CODE BEGIN TIM6_MspInit 1 */
@@ -84,6 +86,7 @@ void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* tim_baseHandle)
   /* USER CODE BEGIN TIM6_MspDeInit 0 */
 
   /* USER CODE END TIM6_MspDeInit 0 */
+    HAL_NVIC_DisableIRQ(TIM6_DAC_IRQn);
     /* Peripheral clock disable */
     __HAL_RCC_TIM6_CLK_DISABLE();
   /* USER CODE BEGIN TIM6_MspDeInit 1 */

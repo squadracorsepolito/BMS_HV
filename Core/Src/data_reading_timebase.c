@@ -1,60 +1,114 @@
 #include "data_reading_timebase.h"
 #include "L9963_utils.h"
 #include "ntc.h"
+#include "bms_temperature.h"
+#include <math.h>
 TIMEBASE_HandleTypeDef data_reading_timebase_handle;
 extern volatile uint16_t vcells[N_SLAVES][N_CELLS_PER_SLAVE];
 extern volatile uint16_t vgpio[N_SLAVES][N_GPIOS_PER_SLAVE];
 extern uint8_t ams_error;
 float vbattery_monitor;
 float vbattery_sum;
+static uint32_t supervision_started_at;
+static uint8_t supervision_started;
+static uint8_t next_module;
+static uint8_t round_failed;
+static uint8_t pack_sample_valid;
+
+uint8_t data_reading_waiting_for_first_sample(void) {
+    return supervision_started && !pack_sample_valid &&
+        HAL_GetTick() - supervision_started_at <= MEASUREMENT_MAX_AGE_MS;
+}
 
 
-void data_reading_timebase_init(void) {
+STMLIBS_StatusTypeDef data_reading_timebase_init(void) {
     uint8_t interval;
-  
-    TIMEBASE_init(&data_reading_timebase_handle, &htim6, 1000);
-  
-    TIMEBASE_add_interval(&data_reading_timebase_handle, 10000, &interval);
-    TIMEBASE_register_callback(&data_reading_timebase_handle, interval, data_reading_l9963e_cb);
-  }
+    supervision_started_at = HAL_GetTick();
+    supervision_started = 1;
+    next_module = 0;
+    round_failed = 0;
+    pack_sample_valid = 0;
+    vbattery_monitor = vbattery_sum = NAN;
+    if (TIMEBASE_init(&data_reading_timebase_handle, &htim6, 1000) != STMLIBS_OK ||
+        TIMEBASE_add_interval(&data_reading_timebase_handle, 10000, &interval) != STMLIBS_OK ||
+        TIMEBASE_register_callback(&data_reading_timebase_handle, interval, data_reading_l9963e_cb) != STMLIBS_OK)
+        return STMLIBS_ERROR;
+    return STMLIBS_OK;
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+    TIMEBASE_TimerElapsedCallback(&data_reading_timebase_handle, htim);
+}
 
 // Induce AMS ERROR if there is a overvoltage for 500 ms
 STMLIBS_StatusTypeDef data_reading_l9963e_cb(){
-    uint8_t is_ntc_measure_required = ntc_is_measure_ext_time();
-    static uint8_t overvoltage_count[N_SLAVES][N_CELLS_PER_SLAVE] = {0};
-    static uint8_t overtemperature_count[N_SLAVES][N_GPIOS_PER_SLAVE] = {0};
+    uint8_t module = next_module;
+    next_module = (next_module + 1U) % N_SLAVES;
+    if (module == 0) round_failed = 0;
+    static uint32_t overvoltage_since[N_SLAVES][N_CELLS_PER_SLAVE] = {0};
+    static uint8_t overvoltage_active[N_SLAVES][N_CELLS_PER_SLAVE] = {0};
+#if !BMS_NTC_CALIBRATION_VERIFIED
+    static uint8_t overtemperature_active[N_SLAVES][N_GPIOS_PER_SLAVE] = {0};
+    static uint32_t overtemperature_since[N_SLAVES][N_GPIOS_PER_SLAVE] = {0};
+#endif
 
-    L9963E_utils_read_all_cells(is_ntc_measure_required);
+    if (L9963E_utils_read_cells(module, 1) != L9963_UTILS_OK) {
+        round_failed = 1;
+        vbattery_monitor = vbattery_sum = NAN;
+        ams_error = SET;
+        Set_AMS_Error();
+        return STMLIBS_ERROR;
+    }
 
-    L9963E_utils_get_total_batt_mv(&vbattery_monitor, &vbattery_sum);
+    if (next_module == 0 && !round_failed) {
+        L9963E_utils_get_total_batt_mv(&vbattery_monitor, &vbattery_sum);
+        pack_sample_valid = 1;
+    }
 
-    if (is_ntc_measure_required){
-        for (uint8_t i = 0; i < N_SLAVES; i++){
+    {
+        {
+            uint8_t i = module;
             for (uint8_t j = 0; j < N_GPIOS_PER_SLAVE; j++){
 
-                if (vgpio[i][j] > OVERTEMPERATURE_TRESHOLD){
-                    overtemperature_count[i][j]++;
+                /* Slave PCB has NTCs on GPIO3/4/5/6/8/9; slot 4 is GPIO7. */
+                if (j == 4) continue;
+#if BMS_NTC_CALIBRATION_VERIFIED
+                if (BMS_temperature_fault(ntc_get_ext_temp(i * N_GPIOS_PER_SLAVE + j))) {
+                    ams_error = SET;
+                    Set_AMS_Error();
+                }
+#else
+                if (vgpio[i][j] * 0.000089f > LEGACY_GPIO_THRESHOLD_V){
+                    if (!overtemperature_active[i][j]) {
+                        overtemperature_active[i][j] = 1;
+                        overtemperature_since[i][j] = HAL_GetTick();
+                    }
 
-                    if (overtemperature_count[i][j] > 100){ // 1000 ms
+                    if (HAL_GetTick() - overtemperature_since[i][j] >= 1000U){ // 1000 ms
                         ams_error = SET;
                     }
                     
                 } else {
-                    overtemperature_count[i][j] = 0;
+                    overtemperature_active[i][j] = 0;
                 }
+#endif
             }
         }
     }
 
-    for (uint8_t i = 0; i < N_SLAVES; i++){
+    {
+            uint8_t i = module;
         for (uint8_t j = 0; j < N_CELLS_PER_SLAVE; j++){
-            if (vcells[i][j] > OVERVOLTAGE_TRESHOLD){
-                overvoltage_count[i][j]++;
-                if (overvoltage_count[i][j] > 50){
+            if (L9963E_utils_get_cell_mv(i, j) > OVERVOLTAGE_THRESHOLD_MV){
+                if (!overvoltage_active[i][j]) {
+                    overvoltage_active[i][j] = 1;
+                    overvoltage_since[i][j] = HAL_GetTick();
+                }
+                if (HAL_GetTick() - overvoltage_since[i][j] >= 500U){
                     ams_error = SET;
                 }
             } else {
-                overvoltage_count[i][j] = 0;
+                overvoltage_active[i][j] = 0;
             }
         }
     }
@@ -63,5 +117,10 @@ STMLIBS_StatusTypeDef data_reading_l9963e_cb(){
 }
 
 void data_reading_timebase_routine(void) {
-    TIMEBASE_routine(&data_reading_timebase_handle);
+    if (TIMEBASE_routine(&data_reading_timebase_handle) != STMLIBS_OK ||
+        (supervision_started && HAL_GetTick() - supervision_started_at > MEASUREMENT_MAX_AGE_MS &&
+         !L9963E_utils_measurements_fresh(MEASUREMENT_MAX_AGE_MS))) {
+        ams_error = SET;
+        Set_AMS_Error();
+    }
 }
