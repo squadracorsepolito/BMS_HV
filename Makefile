@@ -40,6 +40,9 @@ Core/Src/main.c \
 Core/Src/gpio.c \
 Core/Src/adc.c \
 Core/Src/can.c \
+Core/Src/bms_can.c \
+Core/Src/bms_can_protocol.c \
+Core/Src/bms_temperature.c \
 Core/Src/spi.c \
 Core/Src/usart.c \
 Core/Src/stm32f4xx_it.c \

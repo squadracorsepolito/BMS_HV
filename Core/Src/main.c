@@ -35,6 +35,7 @@
 #include "data_reading_timebase.h"
 #include "ntc.h"
 #include "timebase.h"
+#include "bms_can.h"
 #include "timer_utils.h"
 /* USER CODE END Includes */
 
@@ -89,29 +90,6 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-    L9963E_utils_init();
-    //fsm
-    uint8_t n_events = 0;
-
-    if (FSM_BMS_HV_init(&hfsm, n_events, run_callback_1, transition_callback_1) != STMLIBS_OK) {
-        error_code = 2;
-    }
-    if (FSM_start(&hfsm) != STMLIBS_OK) {
-        error_code = 2;
-    }
-    if (FSM_get_state(&hfsm) == FSM_BMS_HV_active_idle){
-      // If first state is active idle then we good
-      Warn_LED_On();
-      HAL_Delay(1000);
-      Warn_LED_Off();
-    } else {
-      Err_LED_On();
-    }
-
-    data_reading_timebase_init();
-    ntc_init();
-    
-    
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -132,14 +110,31 @@ int main(void)
   MX_USART3_UART_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
-    Stat1_LED_On(); // Turn on the LED
+    Open_Precharge();
+    Open_Air_Pos();
+    Open_Air_Neg();
+    ntc_init();
+    if (L9963E_utils_init() != L9963_UTILS_OK ||
+        FSM_BMS_HV_init(&hfsm, 0, run_callback_1, transition_callback_1) != STMLIBS_OK ||
+        FSM_start(&hfsm) != STMLIBS_OK ||
+        data_reading_timebase_init() != STMLIBS_OK ||
+        BMS_CAN_init() != 0) {
+        error_code = 2;
+        Error_Handler();
+    }
+    Stat1_LED_On();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
     while (1) {
+      BMS_CAN_routine();
       data_reading_timebase_routine();
-      FSM_routine(&hfsm);
+      BMS_CAN_routine();
+      if (FSM_routine(&hfsm) != STMLIBS_OK) {
+          error_code = 2;
+          Error_Handler();
+      }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -200,6 +195,11 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
     /* User can add his own implementation to report the HAL error return state */
+    Open_Precharge();
+    Open_Air_Pos();
+    Open_Air_Neg();
+    Set_AMS_Error();
+    Err_LED_On();
     __disable_irq();
     while (1) {
     }

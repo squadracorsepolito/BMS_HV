@@ -180,6 +180,10 @@ L9963E_StatusTypeDef _L9963E_DRV_wait_and_receive(union L9963E_DRV_FrameUnion *f
 
     L9963E_DRV_TXEN_LOW(handle);
     while (frame->cmd.devid != device) {
+        if (L9963E_DRV_GETTICK(handle) - current_tick >= timeout) {
+            L9963E_DRV_TXEN_HIGH(handle);
+            return L9963E_TIMEOUT;
+        }
         while (L9963E_DRV_BNE_READ(handle) == L9963E_IF_GPIO_PIN_RESET) {
             if (L9963E_DRV_GETTICK(handle) - current_tick >= timeout) {
                 L9963E_DRV_TXEN_HIGH(handle);

@@ -3,7 +3,8 @@
 
 #include "adc.h"
 
-#define NTC_EXT_ADC_N 7
+#include "L9963_utils.h"
+#define NTC_EXT_ADC_N (N_SLAVES * N_GPIOS_PER_SLAVE)
 #define NTC_INT_ADC_N 5
 
 void ntc_init(void);
