@@ -10,11 +10,14 @@
  */
 
 #include "bms_hv_fsm.h"
+#include <math.h>
+#include "data_reading_timebase.h"
+#include "bms_temperature.h"
 #ifndef __weak
 #define __weak __attribute__((weak))
 #endif  // __weak
 
-// How do we actually reset an error?
+/* Fault reset remains disabled until an explicit, validated recovery policy exists. */
 
 // Updated in data_reading_timebase
 extern float vbattery_monitor;
@@ -29,7 +32,36 @@ extern uint8_t charge_cmd, drive_cmd, balancing_cmd;
 variables_t variables;
 
 static uint32_t resetting_error_entry_time = 0;
+static uint32_t state_entry_ms;
+static float dcbus_mv;
+static uint32_t dcbus_sampled_at;
+static uint8_t dcbus_valid;
+
+void BMS_HV_set_dcbus_mv(float value) {
+    dcbus_valid = isfinite(value) && value >= 0 && value <= MAX_VOLTAGE_MV;
+    dcbus_mv = value;
+    dcbus_sampled_at = HAL_GetTick();
+}
+
+void BMS_HV_set_commands(uint8_t charge, uint8_t drive, uint8_t balance) {
+    /* Charging control is excluded; conflicting mode requests are rejected. */
+    charge_cmd = 0;
+    drive_cmd = drive && !charge && !balance;
+    balancing_cmd = balance && !drive && !charge;
+}
+
 static ActiveMode_TypeDef active_mode   = IDLE_MODE;
+
+
+static uint8_t sequence_requested(void) {
+    return (active_mode == CHARGING_MODE && variables.charge_cmd && !variables.drive_cmd && !variables.balancing_cmd) ||
+           (active_mode == DRIVING_MODE && variables.drive_cmd && !variables.charge_cmd && !variables.balancing_cmd);
+}
+
+void FSM_BMS_HV_precharge_entry(void) {
+    state_entry_ms = HAL_GetTick();
+    dcbus_valid = 0; /* Require a new reading for each precharge attempt. */
+}
 
 // Variable Update function
 STMLIBS_StatusTypeDef variables_update(variables_t *variables) {
@@ -71,7 +103,8 @@ static uint8_t is_AIRs_closed(){
 static uint8_t ams_error_present(){
 
     return (variables.ams_error || variables.dcbus_overvoltage || variables.nstg_dcbus_overvoltage \
-        || vbattery_monitor < 0 || vbattery_monitor > MAX_VOLTAGE || variables.dcbus_rly_implausibility);
+        || ((!isfinite(vbattery_monitor) || vbattery_monitor <= 0 || vbattery_monitor > MAX_VOLTAGE_MV) &&
+            !data_reading_waiting_for_first_sample()) || variables.dcbus_rly_implausibility);
 }
 
 static uint8_t is_AIRs_open(){
@@ -248,27 +281,32 @@ void FSM_BMS_HV_resetting_errors_entry() {
     ams_error = RESET;
     return;
 }
-void FSM_BMS_HV_close_air_neg_entry() {
+void FSM_BMS_HV_closing_air_neg_entry() {
+    state_entry_ms = HAL_GetTick();
     // Close Negative Air
     Close_Air_Neg();
     return;
 }
-void FSM_BMS_HV_close_air_pos_entry() {
-    // Close Negative Air
+void FSM_BMS_HV_closing_air_pos_entry() {
+    state_entry_ms = HAL_GetTick();
+    // Command positive AIR closed; feedback is checked by do_work.
     Close_Air_Pos();
     return;
 }
-void FSM_BMS_HV_close_precharge_entry() {
-    // Open Precharge
+void FSM_BMS_HV_closing_precharge_entry() {
+    state_entry_ms = HAL_GetTick();
+    // Command the precharge relay closed; this does not indicate precharge completion.
     Close_Precharge();
     return;
 }
-void FSM_BMS_HV_open_precharge_entry() {
+void FSM_BMS_HV_opening_precharge_entry() {
+    state_entry_ms = HAL_GetTick();
     // Open Precharge
     Open_Precharge();
     return;
 }
 void FSM_BMS_HV_resetting_airs_precharge_entry() {
+    state_entry_ms = HAL_GetTick();
     Open_Precharge();
     Open_Air_Pos();
     Open_Air_Neg();
@@ -276,6 +314,10 @@ void FSM_BMS_HV_resetting_airs_precharge_entry() {
 }
 void FSM_BMS_HV_ams_imd_error_entry() {
     // Open Precharge
+    Open_Precharge();
+    Open_Air_Pos();
+    Open_Air_Neg();
+    Set_AMS_Error();
     SDC_On();
     Err_LED_On();
     return;
@@ -309,6 +351,10 @@ FSM_BMS_HV_StateTypeDef FSM_BMS_HV_active_idle_do_work() {
         return FSM_BMS_HV_ams_imd_error;
     }
     if (variables.imd_error) return FSM_BMS_HV_ams_imd_error;
+
+    if (!BMS_POWER_SEQUENCE_ENABLED || !BMS_NTC_CALIBRATION_VERIFIED ||
+        data_reading_waiting_for_first_sample() ||
+        !L9963E_utils_measurements_fresh(MEASUREMENT_MAX_AGE_MS)) return FSM_BMS_HV_active_idle;
 
     if (variables.charge_cmd)   return FSM_BMS_HV_charging_idle;
 
@@ -508,6 +554,7 @@ FSM_BMS_HV_StateTypeDef FSM_BMS_HV_resetting_airs_precharge_do_work(){
         return  FSM_BMS_HV_active_idle;
     }
 
+    if (HAL_GetTick() - state_entry_ms >= BMS_CONTACTOR_TIMEOUT_MS) return FSM_BMS_HV_ams_imd_error;
     return FSM_BMS_HV_resetting_airs_precharge;
 }
 /** @brief wrapper of FSM_BMS_HV_do_work, with exit state checking */
@@ -572,26 +619,12 @@ uint32_t _FSM_BMS_HV_closing_air_neg_event_handle(uint8_t event) {
     }
 }
 // User defined closing_air_neg_do_work
-FSM_BMS_HV_StateTypeDef FSM_BMS_HV_closing_air_neg_do_work() {
+FSM_BMS_HV_StateTypeDef FSM_BMS_HV_closing_air_neg_do_work(void) {
     variables_update(&variables);
-    
-    if (ams_error_present()){
-        ams_error = SET;
-        Set_AMS_Error();
-        return FSM_BMS_HV_ams_imd_error;
-    }
-
-    if (variables.imd_error) return FSM_BMS_HV_ams_imd_error;
-
-    // Check if air negative is closed
-    if ( AIRs_Neg_Int_Closed() && !AIRs_Neg_Mech_Open() ) {
-        return FSM_BMS_HV_closing_precharge;
-
-    } else {
-        // If air negative is not closed, invoke the error
-        return FSM_BMS_HV_resetting_airs_precharge;
-    }
-
+    if (ams_error_present() || variables.imd_error) return FSM_BMS_HV_ams_imd_error;
+    if (!sequence_requested()) return FSM_BMS_HV_resetting_airs_precharge;
+    if (AIRs_Neg_Int_Closed() && !AIRs_Neg_Mech_Open()) return FSM_BMS_HV_closing_precharge;
+    if (HAL_GetTick() - state_entry_ms >= BMS_CONTACTOR_TIMEOUT_MS) return FSM_BMS_HV_ams_imd_error;
     return FSM_BMS_HV_closing_air_neg;
 }
 
@@ -625,24 +658,13 @@ uint32_t _FSM_BMS_HV_closing_precharge_event_handle(uint8_t event) {
     }
 }
 // User defined closing_precharge_do_work
-FSM_BMS_HV_StateTypeDef FSM_BMS_HV_closing_precharge_do_work() {
+FSM_BMS_HV_StateTypeDef FSM_BMS_HV_closing_precharge_do_work(void) {
     variables_update(&variables);
-
-    if (ams_error_present()){
-        ams_error = SET;
-        Set_AMS_Error();
-        return FSM_BMS_HV_ams_imd_error;
-    }
-
-    if (variables.imd_error) return FSM_BMS_HV_ams_imd_error;
-
-    // Check if precharge is closed
-    if ( PRCH_closed() ) {
-        return FSM_BMS_HV_precharge;
-    } else {
-        // If precharge is not closed, invoke the error
-        return FSM_BMS_HV_resetting_airs_precharge;
-    }
+    if (ams_error_present() || variables.imd_error) return FSM_BMS_HV_ams_imd_error;
+    if (!sequence_requested()) return FSM_BMS_HV_resetting_airs_precharge;
+    if (PRCH_closed()) return FSM_BMS_HV_precharge;
+    if (HAL_GetTick() - state_entry_ms >= BMS_CONTACTOR_TIMEOUT_MS) return FSM_BMS_HV_ams_imd_error;
+    return FSM_BMS_HV_closing_precharge;
 }
 /** @brief wrapper of FSM_BMS_HV_do_work, with exit state checking */
 uint32_t _FSM_BMS_HV_closing_precharge_do_work() {
@@ -666,28 +688,23 @@ uint32_t _FSM_BMS_HV_precharge_event_handle(uint8_t event) {
     switch (next) {
         case FSM_BMS_HV_precharge:  // Reentrance is always supported on event handlers
         case FSM_BMS_HV_closing_air_pos:
+        case FSM_BMS_HV_resetting_airs_precharge:
+        case FSM_BMS_HV_ams_imd_error:
             return next;
         default:
             return _FSM_BMS_HV_DIE;
     }
 }
 // User defined precharge_do_work
-FSM_BMS_HV_StateTypeDef FSM_BMS_HV_precharge_do_work() {
+FSM_BMS_HV_StateTypeDef FSM_BMS_HV_precharge_do_work(void) {
     variables_update(&variables);
-
-    if (ams_error_present()){
-        ams_error = SET;
-        Set_AMS_Error();
-        return FSM_BMS_HV_ams_imd_error;
-    }
-
-    if (variables.imd_error) return FSM_BMS_HV_ams_imd_error;
-
-    // How to read DCBUS voltage??
-    // if (variables.vbattery_monitor > MAX_VOLTAGE * 0.95) {
-    //     return FSM_BMS_HV_closing_air_pos;
-    // }
-
+    if (ams_error_present() || variables.imd_error) return FSM_BMS_HV_ams_imd_error;
+    if (!sequence_requested() || !PRCH_closed()) return FSM_BMS_HV_resetting_airs_precharge;
+    if (HAL_GetTick() - state_entry_ms >= BMS_PRECHARGE_TIMEOUT_MS) return FSM_BMS_HV_ams_imd_error;
+    if (dcbus_valid && HAL_GetTick() - dcbus_sampled_at <= BMS_DCBUS_MAX_AGE_MS &&
+        L9963E_utils_measurements_fresh(MEASUREMENT_MAX_AGE_MS) && vbattery_monitor > 0 &&
+        dcbus_mv >= BMS_PRECHARGE_RATIO * vbattery_monitor && dcbus_mv <= vbattery_monitor)
+        return FSM_BMS_HV_closing_air_pos;
     return FSM_BMS_HV_precharge;
 }
 /** @brief wrapper of FSM_BMS_HV_do_work, with exit state checking */
@@ -697,6 +714,8 @@ uint32_t _FSM_BMS_HV_precharge_do_work() {
     switch (next) {
         case FSM_BMS_HV_precharge:  // Added reentrance for current state
         case FSM_BMS_HV_closing_air_pos:
+        case FSM_BMS_HV_resetting_airs_precharge:
+        case FSM_BMS_HV_ams_imd_error:
             return next;
         default:
             return _FSM_BMS_HV_DIE;
@@ -718,26 +737,13 @@ uint32_t _FSM_BMS_HV_closing_air_pos_event_handle(uint8_t event) {
     }
 }
 
-FSM_BMS_HV_StateTypeDef FSM_BMS_HV_closing_air_pos_do_work(){
+FSM_BMS_HV_StateTypeDef FSM_BMS_HV_closing_air_pos_do_work(void) {
     variables_update(&variables);
-    
-    if (ams_error_present()){
-        ams_error = SET;
-        Set_AMS_Error();
-        return FSM_BMS_HV_ams_imd_error;
-    }
-
-    if (variables.imd_error) return FSM_BMS_HV_ams_imd_error;
-
-    // Check if air positive is closed
-    if ( AIRs_Pos_Int_Closed() && !AIRs_Pos_Mech_Open() ) {
-        return FSM_BMS_HV_opening_precharge;
-
-    } else {
-        // If air negative is not closed, invoke the error
-        return FSM_BMS_HV_resetting_airs_precharge;
-    }
-
+    if (ams_error_present() || variables.imd_error) return FSM_BMS_HV_ams_imd_error;
+    if (!sequence_requested()) return FSM_BMS_HV_resetting_airs_precharge;
+    if (AIRs_Pos_Int_Closed() && !AIRs_Pos_Mech_Open()) return FSM_BMS_HV_opening_precharge;
+    if (HAL_GetTick() - state_entry_ms >= BMS_CONTACTOR_TIMEOUT_MS) return FSM_BMS_HV_ams_imd_error;
+    return FSM_BMS_HV_closing_air_pos;
 }
 
 /** @brief wrapper of FSM_BMS_HV_do_work, with exit state checking */
@@ -763,6 +769,7 @@ uint32_t _FSM_BMS_HV_opening_precharge_event_handle(uint8_t event) {
         case FSM_BMS_HV_opening_precharge:  // Reentrance is always supported on event handlers
         case FSM_BMS_HV_driving:
         case FSM_BMS_HV_charging:
+        case FSM_BMS_HV_resetting_airs_precharge:
         case FSM_BMS_HV_ams_imd_error:
             return next;
         default:
@@ -782,10 +789,13 @@ FSM_BMS_HV_StateTypeDef FSM_BMS_HV_opening_precharge_do_work(){
 
     if (variables.imd_error) return FSM_BMS_HV_ams_imd_error;
 
+    if (!sequence_requested()) return FSM_BMS_HV_resetting_airs_precharge;
+    if (HAL_GetTick() - state_entry_ms >= BMS_CONTACTOR_TIMEOUT_MS) return FSM_BMS_HV_ams_imd_error;
+
     if (PRCH_closed() == 0){
         if (active_mode == DRIVING_MODE) return FSM_BMS_HV_driving;
         if (active_mode == CHARGING_MODE) return FSM_BMS_HV_charging;
-        return FSM_BMS_HV_resetting_airs_precharge; // If mode is undefined i hope it doesn happen
+        return FSM_BMS_HV_resetting_airs_precharge; // Unknown mode aborts to open relay commands.
     }
     
     return FSM_BMS_HV_opening_precharge;
@@ -799,6 +809,7 @@ uint32_t _FSM_BMS_HV_opening_precharge_do_work() {
         case FSM_BMS_HV_opening_precharge:  // Added reentrance for current state
         case FSM_BMS_HV_driving:
         case FSM_BMS_HV_charging:
+        case FSM_BMS_HV_resetting_airs_precharge:
         case FSM_BMS_HV_ams_imd_error:
             return next;
         default:

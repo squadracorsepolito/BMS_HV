@@ -11,13 +11,24 @@
 
 #ifndef FSM_BMS_HV_H
 #define FSM_BMS_HV_H
-#define MAX_VOLTAGE ((uint16_t)600)
+#define MAX_VOLTAGE_MV 600000.0f
+/* Enable only after DC-bus sensing, feedback polarity, CAN commands and
+ * contactor/precharge timing have been specified and tested. */
+#define BMS_POWER_SEQUENCE_ENABLED 0
 
 #include "L9963E.h"
 #include "L9963_utils.h"
 #include "L9963E_drv.h"
 #include "fsm.h"
 #include "main.h"
+
+/* Bench defaults only; confirm against hardware before enabling operation. */
+#define BMS_CONTACTOR_TIMEOUT_MS 1000U
+#define BMS_PRECHARGE_TIMEOUT_MS 5000U
+#define BMS_DCBUS_MAX_AGE_MS 100U
+#define BMS_PRECHARGE_RATIO 0.95f
+void BMS_HV_set_dcbus_mv(float millivolts);
+void BMS_HV_set_commands(uint8_t charge, uint8_t drive, uint8_t balance);
 
 void run_callback_1(uint32_t state);
 void transition_callback_1(uint32_t state);

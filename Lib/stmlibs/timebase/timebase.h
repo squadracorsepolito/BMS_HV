@@ -39,7 +39,7 @@ struct TIMEBASE_HandleStruct {
     uint32_t base_interval_us;
 
     TIMEBASE_IntervalTypeDef intervals[TIMEBASE_MAX_INTERVALS];
-    uint32_t intervals_flag;
+    volatile uint32_t intervals_flag;
     uint8_t intervals_length;
 };
 typedef struct TIMEBASE_HandleStruct TIMEBASE_HandleTypeDef;

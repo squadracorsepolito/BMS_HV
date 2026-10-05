@@ -3,6 +3,7 @@
 #include "L9963_utils.h"
 
 #include <memory.h>
+#include <math.h>
 
 #define NTC_MEASURE_INTERVAL 50
 
@@ -26,13 +27,17 @@ uint16_t ntc_int_data[NTC_INT_ADC_N];
 uint16_t ntc_ext_data[NTC_EXT_ADC_N];
 
 uint16_t ntc_dma_data[NTC_INT_ADC_N];
+static uint8_t ext_valid[NTC_EXT_ADC_N];
+static uint8_t int_valid;
 
 void ntc_init(void) {
+    memset(ext_valid, 0, sizeof(ext_valid));
+    int_valid = 0;
     memset(ntc_dma_data, 0, sizeof(ntc_dma_data));
     memset(ntc_int_data, 0, sizeof(ntc_int_data));
     memset(ntc_ext_data, 0, sizeof(ntc_ext_data));
-    // Changed from adc2 to adc1
-    HAL_ADC_Start_DMA(&hadc1, (uint32_t *)ntc_dma_data, NTC_INT_ADC_N);
+    /* ADC1 currently samples shutdown-circuit feedback, not five NTCs.
+     * Do not start DMA without a verified channel map and linked DMA handle. */
 }
 
 //every NTC_MEASURE_INTERVAL voltage measures, start gpio conversion too
@@ -45,19 +50,24 @@ uint8_t ntc_is_measure_ext_time(void) {
 }
 
 void ntc_set_ext_data(uint16_t const *data, uint8_t len, uint8_t offset) {
-    if (len + offset > NTC_EXT_ADC_N)
+    if (data == NULL || len + offset > NTC_EXT_ADC_N)
         return;
 
     for (uint8_t i = 0; i < len; ++i) {
-        ntc_ext_data[i + offset] = NTC_EXP_SMOOTH_ALPHA * data[i + offset] +
-                                   (1 - NTC_EXP_SMOOTH_ALPHA) * ntc_ext_data[i + offset];
+        if (!ext_valid[i + offset]) {
+            ntc_ext_data[i + offset] = data[i];
+            ext_valid[i + offset] = 1;
+        } else {
+            ntc_ext_data[i + offset] = NTC_EXP_SMOOTH_ALPHA * data[i] +
+                (1 - NTC_EXP_SMOOTH_ALPHA) * ntc_ext_data[i + offset];
+        }
     }
 }
 
 void ntc_adc_callback(ADC_HandleTypeDef *hadc) {
-    static uint8_t is_first = 1;
-    if (is_first) {
-        is_first = 0;
+    if (hadc != &hadc1) return;
+    if (!int_valid) {
+        int_valid = 1;
         memcpy(ntc_int_data, ntc_dma_data, sizeof(ntc_int_data));
     }
     for (uint8_t i = 0; i < NTC_INT_ADC_N; ++i) {
@@ -66,22 +76,22 @@ void ntc_adc_callback(ADC_HandleTypeDef *hadc) {
 }
 
 float ntc_get_ext_resistance(uint8_t index) {
-    if (index >= NTC_EXT_ADC_N)
-        return 0;
+    if (index >= NTC_EXT_ADC_N || !ext_valid[index] || ntc_ext_data[index] >= 56180U)
+        return NAN;
 
     return (float)ntc_ext_data[index] / (56180 - ntc_ext_data[index]) * 10e3;
 }
 
 float ntc_get_int_resistance(uint8_t index) {
-    if (index >= NTC_INT_ADC_N)
-        return 0;
+    if (index >= NTC_INT_ADC_N || !int_valid || ntc_int_data[index] >= 4095U)
+        return NAN;
 
     return (float)ntc_int_data[index] / (4095 - ntc_int_data[index]) * 10e3;
 }
 
 float ntc_get_ext_temp(uint8_t index) {
-    if (index >= NTC_EXT_ADC_N)
-        return 0;
+    if (index >= NTC_EXT_ADC_N || !ext_valid[index] || ntc_ext_data[index] >= 56180U)
+        return NAN;
 
     float val  = ntc_ext_data[index] * 0.000089;
     float val2 = val * val;
@@ -93,8 +103,8 @@ float ntc_get_ext_temp(uint8_t index) {
 }
 
 float ntc_get_int_temp(uint8_t index) {
-    if (index >= NTC_INT_ADC_N)
-        return 0;
+    if (index >= NTC_INT_ADC_N || !int_valid || ntc_int_data[index] >= 4095U)
+        return NAN;
 
     float val  = ntc_int_data[index] * 3.3 / 4095;
     float val2 = val * val;
