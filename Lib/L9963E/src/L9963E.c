@@ -104,6 +104,12 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
         write_reg.DEV_GEN_CFG.isotx_en_h = 0;
     }
 
+    /* chip_ID was reset to 0 by L9963E_DEV_GEN_CFG_DEFAULT above, but the slave's
+       chip_ID is now locked at slave_n after addressing.  The readback will contain
+       the actual (locked) chip_ID, so the written data must match or the 18-bit
+       readback comparison in _L9963E_DRV_reg_cmd will return READBACK_ERROR. */
+    write_reg.DEV_GEN_CFG.chip_ID = handle->slave_n;
+
     /* Farthest_Unit write to the last slave — this is unicast, check result */
     status = L9963E_DRV_reg_write(&(handle->drv_handle), handle->slave_n, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
     if (status != L9963E_OK) return status;
