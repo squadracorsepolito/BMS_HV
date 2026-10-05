@@ -31,7 +31,7 @@ const L9963E_IfTypeDef interface_L = {.L9963E_IF_DelayMs       = DelayMs,
 L9963_Utils_StatusTypeDef L9963E_utils_init(void) {
     for (uint8_t i = 0; i < N_SLAVES; ++i) module_valid[i] = 0;
     if (L9963E_init(&hl9963e, interface_H, N_SLAVES) != L9963E_OK ||
-        L9963E_addressing_procedure(&hl9963e, 0b11, 1, 0b00, 1) != L9963E_OK)
+        L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0b00, 1) != L9963E_OK)
         return L9963E_UTILS_ERROR;
 
     /* Extend CommTimeout to 2048ms during configuration. Default after
