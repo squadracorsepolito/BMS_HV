@@ -34,6 +34,13 @@ L9963_Utils_StatusTypeDef L9963E_utils_init(void) {
         L9963E_addressing_procedure(&hl9963e, 0b11, 1, 0b00, 1) != L9963E_OK)
         return L9963E_UTILS_ERROR;
 
+    /* Extend CommTimeout to 2048ms during configuration. Default after
+       power-on is 32ms — too short for the sequence of broadcast writes
+       that follows. Each slave resets if it sees no ISO traffic for
+       longer than CommTimeout. Reduced to 256ms at the end of config. */
+    if (L9963E_setCommTimeout(&hl9963e, _2048MS, L9963E_DEVICE_BROADCAST, 0) != L9963E_OK)
+        return L9963E_UTILS_ERROR;
+
     /** Configuring the chips by writing to the registers, since each chip 
         has the same configuration, we are using Broadcast access 
         to write to all chips at once **/

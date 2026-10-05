@@ -66,13 +66,16 @@ void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(L9963TL_DIS_GPIO_INOUT_GPIO_Port, L9963TL_DIS_GPIO_INOUT_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, L9963TL_NCS_GPIO_OUT_Pin|L9963TL_TXEN_GPIO_OUT_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(L9963TL_TXEN_GPIO_OUT_GPIO_Port, L9963TL_TXEN_GPIO_OUT_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(L9963TL_NCS_GPIO_OUT_GPIO_Port, L9963TL_NCS_GPIO_OUT_Pin, GPIO_PIN_SET);  /* NCS idle HIGH (active-low chip select) */
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(L9963TH_DIS_GPIO_INOUT_GPIO_Port, L9963TH_DIS_GPIO_INOUT_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(L9963TH_NCS_GPIO_OUT_GPIO_Port, L9963TH_NCS_GPIO_OUT_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(L9963TH_NCS_GPIO_OUT_GPIO_Port, L9963TH_NCS_GPIO_OUT_Pin, GPIO_PIN_SET);  /* NCS idle HIGH (active-low chip select) */
 
   /*Configure GPIO pins : STAT1_LED_GPIO_OUT_Pin WARN_LED_GPIO_OUT_Pin STAT2_LED_GPIO_OUT_Pin ERR_LED_GPIO_OUT_Pin */
   GPIO_InitStruct.Pin = STAT1_LED_GPIO_OUT_Pin|WARN_LED_GPIO_OUT_Pin|STAT2_LED_GPIO_OUT_Pin|ERR_LED_GPIO_OUT_Pin;
@@ -87,10 +90,16 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : STEF01FTR_Fault_Feedback_3V3_Pin AIR_POS_INT_STATE_CLOSED_3V3_Pin L9963TL_BNE_GPIO_IN_Pin */
-  GPIO_InitStruct.Pin = STEF01FTR_Fault_Feedback_3V3_Pin|AIR_POS_INT_STATE_CLOSED_3V3_Pin|L9963TL_BNE_GPIO_IN_Pin;
+  /*Configure GPIO pins : STEF01FTR_Fault_Feedback_3V3_Pin AIR_POS_INT_STATE_CLOSED_3V3_Pin */
+  GPIO_InitStruct.Pin = STEF01FTR_Fault_Feedback_3V3_Pin|AIR_POS_INT_STATE_CLOSED_3V3_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : L9963TL_BNE_GPIO_IN_Pin (pull-down: BNE idles LOW, pulses HIGH when data ready) */
+  GPIO_InitStruct.Pin = L9963TL_BNE_GPIO_IN_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pins : nSTG_PRECH_3V3_Pin nSTG_AIR_POS_3V3_Pin AIR_NEG_MECH_STATE_OPEN_3V3_Pin FB_IMPLAUSIBILITY_3V3_Pin */
@@ -113,12 +122,16 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(IMD_STATUS_3V3_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : nSTG_AIR_NEG_3V3_Pin nDCBUS_OVER_60V_3V3_Pin nSTG_DCBUS_OVER60_3V3_Pin FAULT_LINE_1_GPIO_IN_Pin
-                           L9963TH_BNE_GPIO_IN_Pin */
-  GPIO_InitStruct.Pin = nSTG_AIR_NEG_3V3_Pin|nDCBUS_OVER_60V_3V3_Pin|nSTG_DCBUS_OVER60_3V3_Pin|FAULT_LINE_1_GPIO_IN_Pin
-                          |L9963TH_BNE_GPIO_IN_Pin;
+  /*Configure GPIO pins : nSTG_AIR_NEG_3V3_Pin nDCBUS_OVER_60V_3V3_Pin nSTG_DCBUS_OVER60_3V3_Pin FAULT_LINE_1_GPIO_IN_Pin */
+  GPIO_InitStruct.Pin = nSTG_AIR_NEG_3V3_Pin|nDCBUS_OVER_60V_3V3_Pin|nSTG_DCBUS_OVER60_3V3_Pin|FAULT_LINE_1_GPIO_IN_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : L9963TH_BNE_GPIO_IN_Pin (pull-down: BNE idles LOW, pulses HIGH when data ready) */
+  GPIO_InitStruct.Pin = L9963TH_BNE_GPIO_IN_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
   /*Configure GPIO pins : uC_GPIO_OUT_AIR_POS_COMMAND_Pin uC_GPIO_OUT_AIR_NEG_COMMAND_Pin uC_GPIO_OUT_STEF01FTR_Enable_Pin SDC_GENERIC_SWITCH_GPIO_OUT_Pin

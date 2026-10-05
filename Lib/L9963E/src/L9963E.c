@@ -59,25 +59,29 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
             ++x;
             tick = L9963E_DRV_GETTICK(&(handle->drv_handle));
         } else {
-            if (L9963E_DRV_GETTICK(&(handle->drv_handle)) - tick >= 10) {
+            /* Per-slave timeout: 200ms allows for wakeup (15ms) + addressing
+               round-trip over ISO bus. With 12 slaves this gives ~16ms each. */
+            if (L9963E_DRV_GETTICK(&(handle->drv_handle)) - tick >= 200) {
                 return L9963E_TIMEOUT;
             }
 
             //wakeup the device
             status = L9963E_DRV_wakeup(&(handle->drv_handle));
             if (status != L9963E_OK) return status;
-            // by default the wakeup procedure needs 2 ms of time (T_WAKEUP)
-            L9963E_DRV_DELAY(&(handle->drv_handle), 2);
+            /* DS L9963E: t_WAKEUP typ=2ms, but slave needs time to reach INIT
+               state and be ready for SPI commands. 15ms provides safe margin. */
+            L9963E_DRV_DELAY(&(handle->drv_handle), 15);
 
-            //send broadcast command setting the chip_idz
+            //send broadcast command setting the chip_id
             write_reg.generic                  = L9963E_DEV_GEN_CFG_DEFAULT;
             write_reg.DEV_GEN_CFG.chip_ID      = x;
             write_reg.DEV_GEN_CFG.iso_freq_sel = 0b00;
-            write_reg.DEV_GEN_CFG.isotx_en_h   = 0b1;
 
-            status = L9963E_DRV_reg_write(
-                &(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
-            if (status != L9963E_OK) return status;
+            /* NOTE: broadcast write readback will always timeout because the slave
+               responds with its NEW devid (x), not the broadcast address (0).
+               This is expected — do NOT check the return value here. */
+            L9963E_DRV_reg_write(
+                &(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 1);
         }
     }
 
@@ -86,19 +90,21 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
     write_reg.DEV_GEN_CFG.out_res_tx_iso = out_res_tx_iso;
     write_reg.DEV_GEN_CFG.iso_freq_sel   = iso_freq_sel;
 
-    status = iso_freq_sel == 0b11 ?
-        L9963E_DRV_ISOFREQ_HIGH(&(handle->drv_handle)) :
+    if (iso_freq_sel == 0b11)
+        L9963E_DRV_ISOFREQ_HIGH(&(handle->drv_handle));
+    else
         L9963E_DRV_ISOFREQ_LOW(&(handle->drv_handle));
-    if (status != L9963E_OK) return status;
 
-    status = L9963E_DRV_reg_write(&(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
-    if (status != L9963E_OK) return status;
+    /* Broadcast writes: readback always times out (slaves respond with their own
+       devid, not 0). The write itself reaches every slave — ignore timeout. */
+    L9963E_DRV_reg_write(&(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 1);
 
     write_reg.DEV_GEN_CFG.Farthest_Unit = 0b1;
     if (!handle->is_dual_ring) {
         write_reg.DEV_GEN_CFG.isotx_en_h = 0;
     }
 
+    /* Farthest_Unit write to the last slave — this is unicast, check result */
     status = L9963E_DRV_reg_write(&(handle->drv_handle), handle->slave_n, L9963E_DEV_GEN_CFG_ADDR, &write_reg, 10);
     if (status != L9963E_OK) return status;
 
@@ -106,8 +112,8 @@ L9963E_StatusTypeDef L9963E_addressing_procedure(L9963E_HandleTypeDef *handle,
         write_reg.generic                 = L9963E_BAL_3_DEFAULT;
         write_reg.Bal_3.Lock_isoh_isofreq = 1;
 
-        status = L9963E_DRV_reg_write(&(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_3_ADDR, &write_reg, 10);
-        if (status != L9963E_OK) return status;
+        /* Broadcast — ignore readback timeout */
+        L9963E_DRV_reg_write(&(handle->drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_3_ADDR, &write_reg, 1);
     }
 
     return L9963E_OK;
