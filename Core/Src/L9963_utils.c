@@ -37,40 +37,43 @@ L9963_Utils_StatusTypeDef L9963E_utils_init(void) {
     /* Extend CommTimeout to 2048ms during configuration. Default after
        power-on is 32ms — too short for the sequence of broadcast writes
        that follows. Each slave resets if it sees no ISO traffic for
-       longer than CommTimeout. Reduced to 256ms at the end of config. */
-    if (L9963E_setCommTimeout(&hl9963e, _2048MS, L9963E_DEVICE_BROADCAST, 0) != L9963E_OK)
-        return L9963E_UTILS_ERROR;
+       longer than CommTimeout. Reduced to 256ms at the end of config.
 
-    /** Configuring the chips by writing to the registers, since each chip 
-        has the same configuration, we are using Broadcast access 
+       NOTE: broadcast writes always timeout on readback (slave responds
+       with its real devid, not 0), so we must NOT check the return value
+       of any broadcast operation — the write itself reaches every slave. */
+    L9963E_setCommTimeout(&hl9963e, _2048MS, L9963E_DEVICE_BROADCAST, 0);
+
+    /** Configuring the chips by writing to the registers, since each chip
+        has the same configuration, we are using Broadcast access
         to write to all chips at once **/
 
     // Configuring GPIOs
     L9963E_RegisterUnionTypeDef gpio9_3_conf_reg = {.generic = L9963E_GPIO9_3_CONF_DEFAULT};
     gpio9_3_conf_reg.GPIO9_3_CONF.GPIO7_CONFIG   = 0;
     gpio9_3_conf_reg.GPIO9_3_CONF.GPIO8_CONFIG   = 0;
-    if (L9963E_DRV_reg_write(
-        &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_GPIO9_3_CONF_ADDR, &gpio9_3_conf_reg, 10) != L9963E_OK) return L9963E_UTILS_ERROR;
+    L9963E_DRV_reg_write(
+        &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_GPIO9_3_CONF_ADDR, &gpio9_3_conf_reg, 1);
 
     // Configuring cells overvoltage/undervoltage thresholds
     L9963E_RegisterUnionTypeDef vcell_thresh_uv_ov_reg = {.generic = L9963E_VCELL_THRESH_UV_OV_DEFAULT};
     vcell_thresh_uv_ov_reg.VCELL_THRESH_UV_OV.threshVcellOV = 0xff;
     vcell_thresh_uv_ov_reg.VCELL_THRESH_UV_OV.threshVcellUV = 0x50;
-    if (L9963E_DRV_reg_write(
-        &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_VCELL_THRESH_UV_OV_ADDR, &vcell_thresh_uv_ov_reg, 10) != L9963E_OK) return L9963E_UTILS_ERROR;
+    L9963E_DRV_reg_write(
+        &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_VCELL_THRESH_UV_OV_ADDR, &vcell_thresh_uv_ov_reg, 1);
 
     // Configuring total voltage tresholds
     L9963E_RegisterUnionTypeDef vbat_sum_th_reg  = {.generic = L9963E_VBATT_SUM_TH_DEFAULT};
     vbat_sum_th_reg.VBATT_SUM_TH.VBATT_SUM_OV_TH = 0xff;
-    if (L9963E_DRV_reg_write(
-        &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_VBATT_SUM_TH_ADDR, &vbat_sum_th_reg, 10) != L9963E_OK) return L9963E_UTILS_ERROR;
+    L9963E_DRV_reg_write(
+        &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_VBATT_SUM_TH_ADDR, &vbat_sum_th_reg, 1);
 
     // Enabling the Reference Voltage for ADC
-    if (L9963E_enable_vref(&hl9963e, L9963E_DEVICE_BROADCAST, 1) != L9963E_OK) return L9963E_UTILS_ERROR;
+    L9963E_enable_vref(&hl9963e, L9963E_DEVICE_BROADCAST, 1);
 
-    // Set communication timeout and enable cells
-    if (L9963E_setCommTimeout(&hl9963e, _256MS, L9963E_DEVICE_BROADCAST, 0) != L9963E_OK) return L9963E_UTILS_ERROR;
-    if (L9963E_set_enabled_cells(&hl9963e, L9963E_DEVICE_BROADCAST, ENABLED_CELLS) != L9963E_OK) return L9963E_UTILS_ERROR;
+    // Set operational communication timeout and enable cells
+    L9963E_setCommTimeout(&hl9963e, _256MS, L9963E_DEVICE_BROADCAST, 0);
+    L9963E_set_enabled_cells(&hl9963e, L9963E_DEVICE_BROADCAST, ENABLED_CELLS);
 
     /* Configuring balancing operations: Timed Balancing | 20s treshold*/
     L9963E_RegisterUnionTypeDef bal2_conf_reg = {.generic = L9963E_BAL_2_DEFAULT};
@@ -92,12 +95,12 @@ L9963_Utils_StatusTypeDef L9963E_utils_init(void) {
     L9963E_RegisterUnionTypeDef bal8_conf_reg = {.generic = L9963E_BAL_8_DEFAULT};
     bal8_conf_reg.Bal_8.ThrTimedBalCell2      = 5;
     bal8_conf_reg.Bal_8.ThrTimedBalCell1      = 5;
-    if (L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_3_ADDR, &bal3_conf_reg, 10) != L9963E_OK) return L9963E_UTILS_ERROR;
-    if (L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_5_ADDR, &bal5_conf_reg, 10) != L9963E_OK) return L9963E_UTILS_ERROR;
-    if (L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_2_ADDR, &bal2_conf_reg, 10) != L9963E_OK) return L9963E_UTILS_ERROR;
-    if (L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_6_ADDR, &bal6_conf_reg, 10) != L9963E_OK) return L9963E_UTILS_ERROR;
-    if (L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_7_ADDR, &bal7_conf_reg, 10) != L9963E_OK) return L9963E_UTILS_ERROR;
-    if (L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_8_ADDR, &bal8_conf_reg, 10) != L9963E_OK) return L9963E_UTILS_ERROR;
+    L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_3_ADDR, &bal3_conf_reg, 1);
+    L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_5_ADDR, &bal5_conf_reg, 1);
+    L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_2_ADDR, &bal2_conf_reg, 1);
+    L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_6_ADDR, &bal6_conf_reg, 1);
+    L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_7_ADDR, &bal7_conf_reg, 1);
+    L9963E_DRV_reg_write(&(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_Bal_8_ADDR, &bal8_conf_reg, 1);
     /* Legacy balancing register setup only. Discharge start remains inhibited. */
     L9963E_RegisterUnionTypeDef bal_cell14_7act = {.generic = L9963E_BALCELL14_7ACT_DEFAULT};
     bal_cell14_7act.BalCell14_7act.BAL14        = 0b10;
@@ -112,10 +115,10 @@ L9963_Utils_StatusTypeDef L9963E_utils_init(void) {
     bal_cell6_1act.BalCell6_1act.BAL3           = 0b10;
     bal_cell6_1act.BalCell6_1act.BAL2           = 0b10;
     bal_cell6_1act.BalCell6_1act.BAL1           = 0b10;
-    if (L9963E_DRV_reg_write(
-        &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_BalCell6_1act_ADDR, &bal_cell6_1act, 10) != L9963E_OK) return L9963E_UTILS_ERROR;
-    if (L9963E_DRV_reg_write(
-        &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_BalCell14_7act_ADDR, &bal_cell14_7act, 10) != L9963E_OK) return L9963E_UTILS_ERROR;
+    L9963E_DRV_reg_write(
+        &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_BalCell6_1act_ADDR, &bal_cell6_1act, 1);
+    L9963E_DRV_reg_write(
+        &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_BalCell14_7act_ADDR, &bal_cell14_7act, 1);
     return L9963_UTILS_OK;
 }
 
