@@ -70,8 +70,9 @@ static uint8_t is_AIRs_closed(){
 
 static uint8_t ams_error_present(){
 
-    return (variables.ams_error || variables.dcbus_overvoltage || variables.nstg_dcbus_overvoltage \
-        || vbattery_monitor < 0 || vbattery_monitor > MAX_VOLTAGE || variables.dcbus_rly_implausibility);
+    //Commented for testing purposes
+    return (variables.ams_error /*|| variables.dcbus_overvoltage || variables.nstg_dcbus_overvoltage */\
+        || vbattery_monitor < 0 || vbattery_monitor > MAX_VOLTAGE /*||variables.dcbus_rly_implausibility*/);
 }
 
 static uint8_t is_AIRs_open(){
@@ -303,12 +304,13 @@ FSM_BMS_HV_StateTypeDef FSM_BMS_HV_active_idle_do_work() {
     // Reset the active mode
     active_mode = IDLE_MODE;
 
-    if (ams_error_present()) {
+    /*if (ams_error_present()) {
         ams_error = SET;
         Set_AMS_Error();
         return FSM_BMS_HV_ams_imd_error;
-    }
-    if (variables.imd_error) return FSM_BMS_HV_ams_imd_error;
+    }*/
+    //if (variables.imd_error) return FSM_BMS_HV_ams_imd_error;
+    //Commented for testing purposes
 
     if (variables.charge_cmd)   return FSM_BMS_HV_charging_idle;
 

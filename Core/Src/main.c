@@ -89,29 +89,7 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-    L9963E_utils_init();
-    //fsm
-    uint8_t n_events = 0;
-
-    if (FSM_BMS_HV_init(&hfsm, n_events, run_callback_1, transition_callback_1) != STMLIBS_OK) {
-        error_code = 2;
-    }
-    if (FSM_start(&hfsm) != STMLIBS_OK) {
-        error_code = 2;
-    }
-    if (FSM_get_state(&hfsm) == FSM_BMS_HV_active_idle){
-      // If first state is active idle then we good
-      Warn_LED_On();
-      HAL_Delay(1000);
-      Warn_LED_Off();
-    } else {
-      Err_LED_On();
-    }
-
-    data_reading_timebase_init();
-    ntc_init();
-    
-    
+  
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -132,6 +110,31 @@ int main(void)
   MX_USART3_UART_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
+    HAL_Delay(50);
+
+    L9963E_utils_init();
+
+    data_reading_timebase_init();
+    ntc_init();
+
+    //fsm
+    uint8_t n_events = 0;
+
+    if (FSM_BMS_HV_init(&hfsm, n_events, run_callback_1, transition_callback_1) != STMLIBS_OK) {
+        error_code = 2;
+    }
+    if (FSM_start(&hfsm) != STMLIBS_OK) {
+        error_code = 2;
+    }
+    if (FSM_get_state(&hfsm) == FSM_BMS_HV_active_idle){
+      // If first state is active idle then we good
+      Warn_LED_On();
+      HAL_Delay(1000);
+      Warn_LED_Off();
+    } else {
+      Err_LED_On();
+    }
+
     Stat1_LED_On(); // Turn on the LED
   /* USER CODE END 2 */
 
@@ -189,7 +192,15 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM6) {
+        TIMEBASE_TimerElapsedCallback(
+            &data_reading_timebase_handle,
+            htim
+        );
+    }
+}
 /* USER CODE END 4 */
 
 /**

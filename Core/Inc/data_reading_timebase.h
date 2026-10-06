@@ -4,6 +4,8 @@
 #include "timebase.h"
 #include "tim.h"
 
+extern TIMEBASE_HandleTypeDef data_reading_timebase_handle;
+
 #define OVERVOLTAGE_TRESHOLD 4.2f
 
 // CHANGE OVERTEMPERATURE LATER

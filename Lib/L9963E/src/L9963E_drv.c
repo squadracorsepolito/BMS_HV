@@ -23,6 +23,9 @@
 #define FIRST_BIT_MASK     ((uint64_t)1 << (WORD_LEN - 1))  // 0x80000000
 #define CRC_LOWER_MASK     ((uint8_t)(1 << CRC_LEN) - 1)    //0b111
 
+volatile uint8_t l9963_crc_failed_frame[5] = {0};
+volatile uint32_t l9963_crc_error_count = 0;
+
 uint8_t crc6_lut[64] = {0x0,  0x19, 0x32, 0x2b, 0x3d, 0x24, 0xf,  0x16, 0x23, 0x3a, 0x11, 0x8,  0x1e, 0x7,  0x2c, 0x35,
                         0x1f, 0x6,  0x2d, 0x34, 0x22, 0x3b, 0x10, 0x9,  0x3c, 0x25, 0xe,  0x17, 0x1,  0x18, 0x33, 0x2a,
                         0x3e, 0x27, 0xc,  0x15, 0x3,  0x1a, 0x31, 0x28, 0x1d, 0x4,  0x2f, 0x36, 0x20, 0x39, 0x12, 0xb,
@@ -111,6 +114,7 @@ L9963E_StatusTypeDef L9963E_DRV_wakeup(L9963E_DRV_HandleTypeDef *handle) {
 
     isofreq = L9963E_DRV_ISOFREQ_READ(handle);
 
+    L9963E_DRV_TXEN_HIGH(handle);
     L9963E_DRV_ISOFREQ_LOW(handle);
 
     L9963E_DRV_CS_LOW(handle);
@@ -118,6 +122,7 @@ L9963E_StatusTypeDef L9963E_DRV_wakeup(L9963E_DRV_HandleTypeDef *handle) {
     L9963E_DRV_CS_HIGH(handle);
 
     L9963E_DRV_WRITE_PIN(handle, L9963E_IF_ISOFREQ, isofreq);
+    L9963E_DRV_TXEN_LOW(handle);
 
     return errorcode;
 }
@@ -160,8 +165,8 @@ L9963E_StatusTypeDef _L9963E_DRV_spi_transmit(L9963E_DRV_HandleTypeDef *handle,
     L9963E_DRV_TXEN_HIGH(handle);
     L9963E_DRV_CS_LOW(handle);
     errorcode = L9963E_DRV_SPI_TRANSMIT(handle, data, len, timeout);
-    L9963E_DRV_TXEN_LOW(handle);
     L9963E_DRV_CS_HIGH(handle);
+    L9963E_DRV_TXEN_LOW(handle);
 
     return errorcode;
 }
@@ -199,6 +204,11 @@ L9963E_StatusTypeDef _L9963E_DRV_wait_and_receive(union L9963E_DRV_FrameUnion *f
         _L9963E_DRV_switch_endianness(raw, (uint8_t *)&frame->val);
 
         if (frame->cmd.crc != L9963E_DRV_crc_calc(frame->val)) {
+            for (uint8_t i = 0; i < 5; i++)
+            {
+                l9963_crc_failed_frame[i] = raw[i];
+            }
+            l9963_crc_error_count ++;
             return L9963E_CRC_ERROR;
         }
     }

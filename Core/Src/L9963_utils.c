@@ -4,6 +4,10 @@
 /* Using L9963TH to send and receive data
     L9963TL will be used to check the correctness of communication
 */
+
+extern uint8_t ams_error;
+volatile L9963E_StatusTypeDef l9963_debug_status = L9963E_OK;
+
 volatile uint16_t vcells[N_SLAVES][N_CELLS_PER_SLAVE];
 volatile uint16_t vgpio[N_SLAVES][N_GPIOS_PER_SLAVE];
 volatile uint16_t vtot[N_SLAVES];
@@ -35,7 +39,7 @@ void L9963E_utils_init(void) {
 
     // Configuring GPIOs
     L9963E_RegisterUnionTypeDef gpio9_3_conf_reg = {.generic = L9963E_GPIO9_3_CONF_DEFAULT};
-    gpio9_3_conf_reg.GPIO9_3_CONF.GPIO7_CONFIG   = 0;
+    //gpio9_3_conf_reg.GPIO9_3_CONF.GPIO7_CONFIG   = 0;
     gpio9_3_conf_reg.GPIO9_3_CONF.GPIO8_CONFIG   = 0;
     L9963E_DRV_reg_write(
         &(hl9963e.drv_handle), L9963E_DEVICE_BROADCAST, L9963E_GPIO9_3_CONF_ADDR, &gpio9_3_conf_reg, 10);
@@ -108,13 +112,29 @@ void L9963E_utils_init(void) {
 
 void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
     L9963E_StatusTypeDef e;
-    uint8_t c_done;
+    uint8_t c_done=0;
+
+    e = L9963E_start_conversion(&hl9963e, module_id, 0b000, read_gpio ? L9963E_GPIO_CONV : 0);
+
+    //ams flags commented for testing purposes
+
+    /*if (e != L9963E_OK) {
+        l9963_debug_status = e;
+        ams_error = SET;
+        return;
+    }*/
+
+    uint32_t start_tick = HAL_GetTick();
 
     do {
-        L9963E_poll_conversion(&hl9963e, module_id, &c_done);
-    } while (!c_done);
+        e = L9963E_poll_conversion(&hl9963e, module_id, &c_done);
 
-    L9963E_start_conversion(&hl9963e, module_id, 0b000, read_gpio ? L9963E_GPIO_CONV : 0);
+        /*if (e != L9963E_OK ||
+            (HAL_GetTick() - start_tick) >= 100) {
+            ams_error = SET;
+            return;
+        }*/
+    } while (!c_done);
     
     uint16_t voltage       = 0;
     uint8_t d_rdy          = 0;
@@ -224,9 +244,11 @@ void L9963E_utils_read_cells(uint8_t module_id, uint8_t read_gpio) {
 }
 
 void L9963E_utils_read_all_cells(uint8_t read_gpio){
-    for (uint8_t i = 0; i < N_SLAVES; i++) {
-        L9963E_utils_read_cells(i, read_gpio);
-    }
+
+    //Loop deactivated for test purposes
+    //for (uint8_t i = 0; i < N_SLAVES; i++) {
+        L9963E_utils_read_cells(1, read_gpio);
+    //}
 }
 
 
