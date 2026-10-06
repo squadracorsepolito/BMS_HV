@@ -2,9 +2,10 @@
 #include "ntc.h"
 #include <math.h>
 
-/* Using L9963TH to send and receive data
-    L9963TL will be used to check the correctness of communication
-*/
+/* Using L9963TH (SPI3) to send and receive data.
+   Physical cable routing: Core ISOHp/ISOHm → Slave J1 → ISOLp/ISOLm (Port L).
+   This is the standard daisy-chain topology (DS Figures 49-53).
+   L9963TL (SPI2) routes to Slave J2 → Port H (ring return / verification). */
 volatile uint16_t vcells[N_SLAVES][N_CELLS_PER_SLAVE];
 volatile uint16_t vgpio[N_SLAVES][N_GPIOS_PER_SLAVE];
 volatile uint16_t vtot[N_SLAVES];
