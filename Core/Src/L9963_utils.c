@@ -2,10 +2,9 @@
 #include "ntc.h"
 #include <math.h>
 
-/* Using L9963TL (Port L / ISOL) for all communication with slaves.
-   This matches the standard L9963E topology (DS Figures 49-53) where
-   the L9963T connects to the slave's Port L (ISOL).
-   L9963TH (Port H / ISOH) can be used to verify communication. */
+/* Using L9963TH to send and receive data
+    L9963TL will be used to check the correctness of communication
+*/
 volatile uint16_t vcells[N_SLAVES][N_CELLS_PER_SLAVE];
 volatile uint16_t vgpio[N_SLAVES][N_GPIOS_PER_SLAVE];
 volatile uint16_t vtot[N_SLAVES];
@@ -31,7 +30,7 @@ const L9963E_IfTypeDef interface_L = {.L9963E_IF_DelayMs       = DelayMs,
 /* Address the chain before broadcasting configuration; propagate every failure. */
 L9963_Utils_StatusTypeDef L9963E_utils_init(void) {
     for (uint8_t i = 0; i < N_SLAVES; ++i) module_valid[i] = 0;
-    if (L9963E_init(&hl9963e, interface_L, N_SLAVES) != L9963E_OK ||
+    if (L9963E_init(&hl9963e, interface_H, N_SLAVES) != L9963E_OK ||
         L9963E_addressing_procedure(&hl9963e, 0b11, 0, 0b00, 1) != L9963E_OK)
         return L9963E_UTILS_ERROR;
 
